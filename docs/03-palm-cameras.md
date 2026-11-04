@@ -18,7 +18,13 @@ cameras (the hands' Ethernet only carries Modbus).
 * `/dev/videoN` numbers can change after a reboot or replug; the **by-path
   names follow the hub port**. The left/right mapping is therefore valid only
   while the cables stay in the same hub ports — swapping them swaps the hands.
-* OpenCV 4.2.0 on the Jetson opens them with `cv2.VideoCapture(path_or_index, cv2.CAP_V4L2)`.
+* OpenCV 4.2.0 on the Jetson opens them with `cv2.VideoCapture(path_or_index, cv2.CAP_V4L2)`;
+  the `by-path` strings work (verified), opening takes 0.5-1 s, and the frame
+  comes back BGR (a blue cable in view shows up blue after `BGR2RGB`).
+* **Real frame rate ~14 fps** per camera at 640x480, although the driver
+  reports 30: measured 13.7-14.2 fps in YUYV and 12.5-12.8 fps in MJPG, one
+  camera open at a time. Looks camera-limited (not investigated; the UVC
+  controls such as exposure were deliberately left untouched).
 * With the fingers closed, the cameras see past the fingers to the floor.
 
 ## How right/left was determined
