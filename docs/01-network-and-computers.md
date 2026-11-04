@@ -54,25 +54,51 @@ gateway is needed for the robot LAN.
   verified). It uses its **own DDS config**,
   `/unitree/module/video_hub_pc4/cyclonedds.xml`, which pins CycloneDDS to the
   interface **`eth0`** by name.
-* **Root cause of the dead video service on 2026-11-04 (verified):** the
-  interface names flipped, so `eth0` became the USB LAN adapter (no carrier, no
-  address) and the robot LAN moved to `eth1`. Run by hand with the stock config,
-  the hub prints `eth0: does not match an available interface` /
-  `dds_create_participant: Error` and aborts (exit 134) — that is why
-  `master_service` saw it die after every start until its protect count (30)
-  ran out. Selecting the interface by address instead,
-  `<NetworkInterface address="192.168.123.164" .../>`, makes it start normally
-  (NVENC initialises and it keeps running). The kernel names the PCIe NIC
-  (`r8169`) and the USB adapter (`cdc_ether`, on the Jetson's internal hub) in
-  probe order, so the names can flip again at any boot.
-* **Temporary fix used (no file changed, lost at reboot):**
-  ```bash
-  export CYCLONEDDS_URI='<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="192.168.123.164" priority="default" multicast="default" /></Interfaces></General></Domain></CycloneDDS>'
-  setsid nohup /unitree/module/video_hub_pc4/videohub_pc4 /dev/video4 > /tmp/videohub_pc4_manual.log 2>&1 < /dev/null &
-  ```
-  Permanent options (all need root on the Jetson, none applied): edit the xml to
-  select by `address=`, or add a udev/systemd `.link` rule that pins the PCIe
-  NIC to `eth0`.
+* **Why the video service is dead — three separate causes, found on 2026-11-04:**
+  1. **The DDS config pins `eth0`** (verified). The interface names flipped, so
+     `eth0` became the USB LAN adapter (no carrier, no address) and the robot LAN
+     moved to `eth1`. Run by hand with the stock config, the hub prints
+     `eth0: does not match an available interface` /
+     `dds_create_participant: Error` and aborts (exit 134), so `master_service`
+     saw it die after every start until its protect count (30) ran out.
+     Selecting the interface by address instead,
+     `<NetworkInterface address="192.168.123.164" .../>`, fixes this part. The
+     kernel names the PCIe NIC (`r8169`) and the USB adapter (`cdc_ether`) in
+     probe order, so the names can flip again at any boot.
+  2. **The binary hard-codes `eth0` for the app stream** (verified). Its pipeline
+     ends in `rtph264pay ! udpsink host=230.1.1.1 port=1720 multicast-iface=eth0`.
+     A copy of the binary in `/tmp` with `eth0` replaced by `eth1` (same length, the
+     original untouched) sends the 720p H.264 stream as RTP multicast: the laptop
+     received it (8 Mbit/s, ~15 frames/s, payload type 96, from `.164`) and the DDS
+     topics `/frontvideostream` (`unitree_go/msg/Go2FrontVideoData`),
+     `/api/videohub/{request,response}` and `/videohub/inner` appeared.
+  3. **The camera stream stalls after a random time — NOT solved.** Even with 1 and
+     2 fixed, the hub stops after 26-90 s: either it aborts (`v4l2src0` reports
+     `poll error 1: Invalid argument`, then `Failed to allocate a buffer`,
+     `streaming stopped, reason error (-5)`, and the program calls `g_error`), or it
+     hangs with the process alive (`v4l2src` waits in `poll()`, the per-second sample
+     counters go from 15 to 0). It reproduces **without any Unitree software**:
+     `gst-launch-1.0` with Unitree's pipeline and `fakesink`s died after 35 s, and
+     even `v4l2src ! queue ! nvvidconv ! fakesink` died after 15 s, while the camera
+     alone (`v4l2src ! fakesink`, 1080p YUY2 15 fps) ran 240 s clean and plain OpenCV
+     grabs work. It is not the cable or the port (USB 3, 5000 Mbit/s), the
+     temperature (53 °C), the load (0.1), the power mode (`MAXN`) or the
+     `master_service` start attempts (their timing does not match the failures).
+     Suspects that **need root** to check: the USB 3 link power management of the
+     camera (`usb3_hardware_lpm_u1=enabled`, hub `u1`+`u2` enabled,
+     `power/control=auto`, autosuspend 2000 ms — a known cause of RealSense
+     stalls on Jetsons) and the kernel log (`dmesg` is root-only).
+* **State left on 2026-11-04:** no video service is running; `master_service` has
+  given up on `video_hub_pc4` (and, from 00:39 Jetson time, on
+  `video_hub_pc4_chest`, which has no camera on this unit and died about a minute
+  after the experiment with the copy started; the link is unknown). Nothing under
+  `/unitree` was changed. A reboot, or `mscli startservice video_hub_pc4`, restarts it
+  with the stock config, which fails as in cause 1.
+* **What would fix it (all need root on the Jetson, none applied):** a udev rule
+  that pins the PCIe NIC to `eth0` and the USB adapter to another name (the
+  profile `unitree1` is not bound to an interface name or MAC, so it follows), which
+  fixes causes 1 and 2 at once; and, for cause 3, `power/control=on` on the camera
+  and its hub (a udev rule for `8086:0b3a`) after reading `dmesg` during a stall.
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
 ## Talking DDS from the laptop
