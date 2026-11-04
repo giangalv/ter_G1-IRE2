@@ -50,13 +50,29 @@ gateway is needed for the robot LAN.
 * `video_hub_pc4` runs `videohub_pc4 /dev/video4`: it reads the **RealSense D435i
   colour stream** (`/dev/video4`, 1920x1080 YUY2 @ 15 fps via `v4l2src`), encodes
   it with the Jetson hardware encoder (`nvv4l2h264enc`, `nvjpegenc`) and
-  publishes it over DDS — presumably what the phone app shows as video
-  (not verified). On 2026-11-04 it was dead: it exited right after every start
-  since at least 19:26, the master gave up (protect count 30), and the
-  RealSense colour node `/dev/video4` only appeared at 19:59 (its USB cable
-  had apparently been unplugged until then). A manual 5-frame
-  `gst-launch-1.0 v4l2src device=/dev/video4 ! video/x-raw,format=YUY2,width=1920,height=1080,framerate=15/1`
-  worked, so the camera itself was fine at that point; the exit cause is unknown.
+  serves it over DDS — presumably what the phone app shows as video (not
+  verified). It uses its **own DDS config**,
+  `/unitree/module/video_hub_pc4/cyclonedds.xml`, which pins CycloneDDS to the
+  interface **`eth0`** by name.
+* **Root cause of the dead video service on 2026-11-04 (verified):** the
+  interface names flipped, so `eth0` became the USB LAN adapter (no carrier, no
+  address) and the robot LAN moved to `eth1`. Run by hand with the stock config,
+  the hub prints `eth0: does not match an available interface` /
+  `dds_create_participant: Error` and aborts (exit 134) — that is why
+  `master_service` saw it die after every start until its protect count (30)
+  ran out. Selecting the interface by address instead,
+  `<NetworkInterface address="192.168.123.164" .../>`, makes it start normally
+  (NVENC initialises and it keeps running). The kernel names the PCIe NIC
+  (`r8169`) and the USB adapter (`cdc_ether`, on the Jetson's internal hub) in
+  probe order, so the names can flip again at any boot.
+* **Temporary fix used (no file changed, lost at reboot):**
+  ```bash
+  export CYCLONEDDS_URI='<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="192.168.123.164" priority="default" multicast="default" /></Interfaces></General></Domain></CycloneDDS>'
+  setsid nohup /unitree/module/video_hub_pc4/videohub_pc4 /dev/video4 > /tmp/videohub_pc4_manual.log 2>&1 < /dev/null &
+  ```
+  Permanent options (all need root on the Jetson, none applied): edit the xml to
+  select by `address=`, or add a udev/systemd `.link` rule that pins the PCIe
+  NIC to `eth0`.
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
 ## Talking DDS from the laptop
