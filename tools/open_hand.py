@@ -2,6 +2,7 @@
 import socket, struct, subprocess, sys, time
 
 HOST = sys.argv[1]
+SIDE = sys.argv[2] if len(sys.argv) > 2 else "destra"   # only used in the spoken warning
 SPEED_SLOW, SPEED_FACTORY = 300, 1000
 FORCE_ABORT = 700          # |FORCE_ACT| above this -> hold position and stop (idle ~130)
 A_SET, F_SET, S_SET, A_ACT, F_ACT, CUR, ERR, STA, TMP = 1486, 1498, 1522, 1546, 1582, 1594, 1606, 1612, 1618
@@ -42,7 +43,7 @@ st = snapshot("before")
 if any(st["ERROR"]): sys.exit("ERROR register not zero - not writing anything")
 if max(abs(v) for v in st["FORCE_ACT"]) > FORCE_ABORT: sys.exit("fingers already loaded - not writing anything")
 
-say("Apro la mano destra tra cinque secondi. Tieni le mani lontane dalle dita.")
+say(f"Apro la mano {SIDE} tra cinque secondi. Tieni le mani lontane dalle dita.")
 time.sleep(5)
 
 wr(S_SET, [SPEED_SLOW] * 6)
@@ -70,4 +71,4 @@ wr(S_SET, [SPEED_FACTORY] * 6)
 final = snapshot("after")
 print("RESULT:", "aborted" if aborted else "done", flush=True)
 sock.close()
-if not aborted: say("Mano destra aperta. Dimmi pronto quando vuoi iniziare.")
+if not aborted: say(f"Mano {SIDE} aperta. Dimmi pronto quando vuoi iniziare.")

@@ -17,10 +17,10 @@ Do not assume the opposite: the Unitree convention would have suggested it.
 
 * TCP **6000** is open on both hands, **502 is closed**. Unit id **1**.
 * Function **0x03** (read holding registers) verified. Function **0x10**
-  (write multiple registers) verified on the **right hand** on 2026-11-04: one
+  (write multiple registers) verified on **both hands** on 2026-11-04: per hand one
   write of `SPEED_SET` (300) and one of `ANGLE_SET` (open), both echoed
   `(address, count)` and read back exactly (`tools/open_hand.py`). Nothing else
-  was ever written, and nothing at all on the left hand.
+  was ever written (`FORCE_SET` never).
 * The `HAND_ID` register reads `1` on both hands (it is the Modbus slave id, it
   does *not* tell the hand model).
 
@@ -89,7 +89,7 @@ right: the thumb rests against something in the closed fist).
 **two simultaneous Modbus clients**, so a second connection can read the
 tactile block without slowing the position loop.
 
-**Where the regions are (right hand, measured 2026-11-04 with the hand open):**
+**Where the regions are (measured 2026-11-04 with the hand open; fully on the right hand, a quick 19-step check gave the same result on the left):**
 voice-guided presses with `tools/tactile_session.py`, one finger and one spot per
 step, read-only. The rubber skin has two grip textures (user's description):
 **dots** on the palm, the fingertip and the first, second and third phalanx, and
@@ -137,7 +137,7 @@ First phalanx = the one nearest the hand, third = the one with the fingerprint.
   little finger's cells did not correlate with its actuator force
   (`FORCE_ACT`, correlation 0.2), because the two measure different things.
   Press a known weight on a known region to calibrate;
-* the **left hand** (same layout assumed, only the right was mapped);
+* the finer details on the **left hand** (it was checked once per region, with the same result as the right: every region lit where expected, `thumb_middle` +796 at (1,1); the palm columns/rows were not compared);
 * the left/right orientation of the columns of `nail`/`pad` and of the palm rows.
 
 Tool: `tools/tactile_probe.py HOST [SECONDS] [--map]` prints the active regions
@@ -146,7 +146,7 @@ every second and draws a heat map of the most active one.
 ## What is known to be safe
 
 * Reads (0x03) at even addresses < 6000: always; used extensively.
-* The only writes so far are the ones of `tools/open_hand.py` on the right hand:
+* The only writes so far are the ones of `tools/open_hand.py` on each hand (right first, then left, same result):
   `SPEED_SET` 300 then `ANGLE_SET` 1000 (thumb rotation kept at its current
   value). All fingers reached 996-998 in about 2 s with `ERROR` = 0 and the forces
   falling to ~0; `SPEED_SET` was restored to 1000 afterwards. Before writing,
