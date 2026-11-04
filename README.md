@@ -1,11 +1,10 @@
 # ter_G1-IRE2 — the Unitree G1 U6 with Inspire RH56E2 hands, explained
 
-Basic reference for the lab's **Unitree G1 EDU Ultimate (U6)** humanoid: which
+Basic reference for the lab's **Unitree G1 EDU Ultimate** humanoid: which
 computers it has, how they are networked, what the **Inspire RH56E2** hands
 speak, where the **palm cameras** and the **LiDAR** show up, and how to talk to
 all of it from a laptop. Everything here was measured on the real robot
-(hanging on its support stand) on **2026-11-04**; each page says what is
-verified and what is only a hypothesis.
+(hanging on its support stand).
 
 ## Contents
 
