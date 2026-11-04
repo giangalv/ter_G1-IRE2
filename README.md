@@ -31,13 +31,13 @@ all of it from a laptop. Everything here was measured on the real robot
 | Thing | Value |
 |---|---|
 | Hands | Inspire Robots `RH56E2-2R-T1` / `RH56E2-2L-T1` (6 actuators each, `T1` = resistive tactile variant) |
-| Hand protocol | **Modbus TCP**, port **6000**, unit id **1** (not serial/RS-485 here) |
-| Hand IPs | **right = .211, left = .210** (found by experiment, not the other way round) |
-| Palm cameras | 2 × UVC "Abham Image", 640×480 @ 30 fps, on the **Jetson's USB hub** (not on Ethernet) |
+| Hand protocol | **Modbus TCP**, port **6000**, unit id **1** |
+| Hand IPs | **right = .211, left = .210** |
+| Palm cameras | 2 × UVC "Abham Image", 640×480 @ 30 fps, on the **Jetson's USB hub** |
 | LiDAR | Livox MID-360, Ethernet, `192.168.123.120`; cloud 10 Hz + IMU 200 Hz on DDS `/utlidar/*_livox_mid360` |
 | Head camera | Intel RealSense D435i on the Jetson |
 | Robot middleware | Unitree stack on ROS 2 DDS **domain 0** (CycloneDDS) |
-| Head camera / app video | D435i → Jetson service `video_hub_pc4` (was dead on 2026-11-04, see [01](docs/01-network-and-computers.md)) |
+| Head camera / app video | D435i → Jetson service `video_hub_pc4` (see [01](docs/01-network-and-computers.md)) |
 
 ## Open questions
 
