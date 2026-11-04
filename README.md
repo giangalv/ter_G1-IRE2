@@ -17,7 +17,7 @@ verified and what is only a hypothesis.
 | Page | What it covers |
 |---|---|
 | [docs/01-network-and-computers.md](docs/01-network-and-computers.md) | Devices on the `192.168.123.0/24` LAN, the Jetson, how to connect a laptop, DDS environment |
-| [docs/02-inspire-rh56e2-hands.md](docs/02-inspire-rh56e2-hands.md) | Hand model, Modbus TCP on port 6000, **byte-addressed** registers, register map, left/right, tactile status |
+| [docs/02-inspire-rh56e2-hands.md](docs/02-inspire-rh56e2-hands.md) | Hand model, Modbus TCP on port 6000, **byte-addressed** registers, register map, left/right, **tactile arrays (17 regions, 1062 cells)** |
 | [docs/03-palm-cameras.md](docs/03-palm-cameras.md) | The two palm-facing USB cameras: devices, stable names, left/right mapping |
 | [docs/04-lidar-mid360.md](docs/04-lidar-mid360.md) | Livox MID-360 in the head: address, **the DDS topics that carry its point cloud (10 Hz) and IMU (200 Hz)** |
 | [docs/05-unitree-dds.md](docs/05-unitree-dds.md) | Native Unitree topics seen over DDS (arms, hands, SLAM API) |
@@ -47,7 +47,7 @@ verified and what is only a hypothesis.
 
 ## Open questions
 
-* Tactile (`T1`) register block of the hands is located but **not decoded**.
+* Tactile (`T1`): the layout (17 regions, 1062 cells) is **decoded and confirmed on the right little finger**, but the physical position of each region and the force per count are not verified (no calibration).
 * The **write path** of the hands (set angle / force) is **untested** on hardware.
 * The `livox_frame` → robot-base transform of the LiDAR is unknown; the SLAM service did not answer one start request.
 * Force units of `FORCE_ACT` (grams?) are assumed, not verified.

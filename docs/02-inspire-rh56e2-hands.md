@@ -54,15 +54,51 @@ thumb-bend, thumb-rotation**.
 At the time of the measurements both hands were in a closed fist
 (`ANGLE_ACT` fingers ≈ 0, thumb rotation ≈ 984).
 
-### Tactile (`T1`)
+### Tactile arrays (`T1`)
 
-`FORCE_ACT` has only **6 values per hand** — one per actuator — *not* the 15
-per-phalanx values of the older RH56DFQ. The `T1` resistive tactile data is
-somewhere else: a block of ~174 registers around byte addresses **3018 … 3368**
-moved by up to ~1400 counts on the right hand while the little finger was
-pulled, so it probably is the tactile array. **Layout and sensor count are not
-decoded.** Getting a clean map needs the hand open and a controlled press on
-known spots (a write command to open the hand is required first).
+`FORCE_ACT` has only 6 values per hand (one per actuator). The `T1` tactile data
+is a separate block of **1062 cells in 17 regions**, byte addresses
+**3000 … 5123**, one 16-bit register per cell, **0 = no contact … 4095**.
+The layout is the one of Inspire's **RH56DFTP** manual (section 2.6.20, as
+transcribed by the third-party `inspire-rh56dftp` Python driver) and it fits
+this hand:
+
+| Region (per finger) | Cells | Start address (little finger) |
+|---|---|---|
+| `tip` | 3×3 = 9 | 3000 |
+| `nail` | 12×8 = 96 | 3018 |
+| `pad` | 10×8 = 80 | 3210 |
+
+Order in memory: **little, ring, middle, index** (`tip`, `nail`, `pad` each), then
+the **thumb** (`tip` 4480 3×3, `nail` 4498 12×8, `middle` 4690 3×3, `pad` 4708
+12×8), then the **palm** (4900, 8×14 = 112 cells). Each finger block is 185
+cells = 370 bytes (little 3000, ring 3370, middle 3740, index 4110). All region
+addresses are even and the whole block is contiguous, so it can be read in 11
+requests of ≤ 125 registers (the Modbus limit). Nothing needs to be written.
+
+**How it was checked on the real hands:** in the pull test of the right little
+finger (2026-11-04) only `little_nail` (92 of 96 cells > 100 counts, peak 1438)
+and `little_pad` (79 of 80, peak 1392) moved; every other region of both hands
+stayed at ~0, and the left hand was silent. The idle baseline is 0 counts except
+a constant load on the thumb tip (`thumb_tip` ≈ 90 on the left hand, ≈ 380 on the
+right: the thumb rests against something in the closed fist).
+
+**Cost:** a full read takes ~19 ms per hand (≈ 53 Hz at best). The hand accepts
+**two simultaneous Modbus clients**, so a second connection can read the
+tactile block without slowing the position loop.
+
+**Not verified:**
+
+* which physical part of the finger each region covers (the names are the
+  manual's; "nail" and "pad" may not be where the words suggest);
+* the force behind a count. There is **no usable calibration**: the sum of the
+  little finger's cells did not correlate with its actuator force
+  (`FORCE_ACT`, correlation 0.2), because the two measure different things.
+  Press a known weight on a known region to calibrate;
+* the palm and the thumb regions were never touched on purpose.
+
+Tool: `tools/tactile_probe.py HOST [SECONDS] [--map]` prints the active regions
+every second and draws a heat map of the most active one.
 
 ## What is known to be safe
 
