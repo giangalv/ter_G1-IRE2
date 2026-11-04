@@ -19,7 +19,7 @@ verified and what is only a hypothesis.
 | [docs/01-network-and-computers.md](docs/01-network-and-computers.md) | Devices on the `192.168.123.0/24` LAN, the Jetson, how to connect a laptop, DDS environment |
 | [docs/02-inspire-rh56e2-hands.md](docs/02-inspire-rh56e2-hands.md) | Hand model, Modbus TCP on port 6000, **byte-addressed** registers, register map, left/right, tactile status |
 | [docs/03-palm-cameras.md](docs/03-palm-cameras.md) | The two palm-facing USB cameras: devices, stable names, left/right mapping |
-| [docs/04-lidar-mid360.md](docs/04-lidar-mid360.md) | Livox MID-360 in the head: address, what was tried, why no point cloud yet |
+| [docs/04-lidar-mid360.md](docs/04-lidar-mid360.md) | Livox MID-360 in the head: address, **the DDS topics that carry its point cloud (10 Hz) and IMU (200 Hz)** |
 | [docs/05-unitree-dds.md](docs/05-unitree-dds.md) | Native Unitree topics seen over DDS (arms, hands, SLAM API) |
 | [tools/](tools/README.md) | Small scripts used to find all of the above |
 
@@ -40,15 +40,16 @@ verified and what is only a hypothesis.
 | Hand protocol | **Modbus TCP**, port **6000**, unit id **1** (not serial/RS-485 here) |
 | Hand IPs | **right = .211, left = .210** (found by experiment, not the other way round) |
 | Palm cameras | 2 × UVC "Abham Image", 640×480 @ 30 fps, on the **Jetson's USB hub** (not on Ethernet) |
-| LiDAR | Livox MID-360, Ethernet, `192.168.123.120` — currently **not streaming** |
+| LiDAR | Livox MID-360, Ethernet, `192.168.123.120`; cloud 10 Hz + IMU 200 Hz on DDS `/utlidar/*_livox_mid360` |
 | Head camera | Intel RealSense D435i on the Jetson |
 | Robot middleware | Unitree stack on ROS 2 DDS **domain 0** (CycloneDDS) |
+| Head camera / app video | D435i → Jetson service `video_hub_pc4` (was dead on 2026-11-04, see [01](docs/01-network-and-computers.md)) |
 
 ## Open questions
 
 * Tactile (`T1`) register block of the hands is located but **not decoded**.
 * The **write path** of the hands (set angle / force) is **untested** on hardware.
-* The LiDAR point cloud is not flowing; the SLAM service did not answer one start request.
+* The `livox_frame` → robot-base transform of the LiDAR is unknown; the SLAM service did not answer one start request.
 * Force units of `FORCE_ACT` (grams?) are assumed, not verified.
 
 ## License

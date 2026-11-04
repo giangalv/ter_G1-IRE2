@@ -4,41 +4,61 @@
 
 * **Livox MID-360** in the head, **Ethernet only** (no USB), IP
   `192.168.123.120`, MAC `ec:72:f7:66:84:f7`. Confirmed by the user.
+* Its driver does **not** run on the Jetson: the Jetson's `master_service` only
+  manages `ota_pipe` and the video hub. The point cloud comes from Unitree's own
+  software on the other computer (PC1, `192.168.123.161`, no SSH), which
+  republishes it on DDS.
 
-## State on 2026-11-04: not streaming
+## It streams: read it from DDS (domain 0)
 
-* Nothing on the Jetson receives its data: no lidar process runs, nothing
-  listens on UDP 56301 / 56401 (Livox SDK2 point/IMU ports) and the UDP
-  `NoPorts` counter does not move. Whoever is configured to receive the stream
-  is probably PC1 (`.161`, not accessible) or Unitree's own stack.
-* The Livox SDK2 libraries are installed on the Jetson, and old logs
-  (Nov 2023) show `livox_ros_driver2`, LIO-SAM and a Hesai node once ran from
-  `/unitree/module/graph_pid_ws`; that workspace no longer exists.
-* The DDS graph advertises `/unitree/slam_mapping/points`,
-  `/unitree/slam_relocation/points` (PointCloud2) and `/utlidar/range_info`,
-  all with **0 publishers**.
+Verified 2026-11-04 with `tools/lidar_listen.py` (read-only subscriber):
 
-## SLAM start attempt
+| Topic | Type | Rate | Publisher |
+|---|---|---|---|
+| `/utlidar/cloud_livox_mid360` | `sensor_msgs/PointCloud2` | **10 Hz** | 1 (Unitree, a bare-DDS app), RELIABLE / VOLATILE |
+| `/utlidar/imu_livox_mid360` | `sensor_msgs/Imu` | **200 Hz** | 1 (same), RELIABLE / VOLATILE |
 
-With the user's approval, one request was sent with `tools/slam_call.py`:
+Both use `frame_id: livox_frame`. Nobody else was subscribed. No extra
+configuration is needed beyond the DDS environment of
+[01](01-network-and-computers.md).
+
+Cloud layout: `width = 20063, height = 1`, `point_step = 22`, fields
+`x, y, z` (float32, metres), `intensity` (float32, 0-255), `ring`
+(uint16, only the values 0-3 were seen), `time` (float32, 1e4 … 1.0e8 observed, looks like nanoseconds inside the 100 ms frame).
+About **48 % of the points are exactly (0, 0, 0)**, i.e. no return in that
+direction; drop them (range < 5 cm). A typical frame had ~9.7k valid points,
+range median 2.3 m, up to 17 m, z from -1.45 to +1.76 m. The top view of one
+frame showed the walls and furniture of the room, so it is a real scan.
+
+The IMU's `orientation` is all zeros (not provided) and its angular velocity is
+filled in; the linear acceleration was not inspected.
+
+Not known yet: the transform `livox_frame` → robot base (no TF is published for
+it), so the cloud is in the sensor frame.
+
+## What I got wrong first
+
+Earlier the same day I concluded the LiDAR was **not streaming**. I had only
+looked at `/unitree/slam_mapping/points` and `/unitree/slam_relocation/points`
+(PointCloud2, **0 publishers** — they only exist while Unitree's SLAM runs) and
+at the Jetson's UDP ports (the Livox pushes to PC1, not to the Jetson). The raw
+LiDAR topics are the `/utlidar/*_livox_mid360` ones above.
+
+## SLAM (separate from the raw stream)
+
+With the user's approval, one SLAM-start request was sent with `tools/slam_call.py`:
 
 ```
 topic    /api/slam_operate/request   (unitree_api/msg/Request, 1 subscriber)
 api_id   1801   parameter {"data":{"slam_type":"indoor"}}   # "start mapping"
 ```
 
-No response arrived (`/api/slam_operate/response` has no publisher) and no
-`/unitree/slam_mapping/*` publisher appeared within 32 s. The api ids come
-from a third-party mirror of Unitree's documentation and are **unverified**
-(the official pages need JavaScript). Nothing else was sent; no "close SLAM"
-(1901) was needed.
+No response arrived and no `/unitree/slam_mapping/*` publisher appeared within
+32 s. The api ids come from a third-party mirror of Unitree's documentation and
+are **unverified**. Nothing else was sent. This has no bearing on the raw
+`/utlidar/*` stream, which works without SLAM.
 
-## Options for next time
+## Other topics seen
 
-1. Use the Unitree phone app to start mapping, then look again at
-   `/unitree/slam_*/points` and `/utlidar/*` on DDS domain 0.
-2. Re-point the Livox to another host with the Livox SDK2 configuration (needs
-   the host IP and ports). **This takes the stream away from whatever
-   consumes it now** — only after agreeing on it.
-3. Livox SDK2 broadcast discovery on UDP 56000 (needs the SDK2 CRC16/CRC32
-   framing, not attempted).
+`/utlidar/range_info` (`geometry_msgs/PointStamped`, 0 publishers, 1 subscriber),
+`/unitree_slam/high_rate_odometry`, `/state_estimator/*` odometry topics.

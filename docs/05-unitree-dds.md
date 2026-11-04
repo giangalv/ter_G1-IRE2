@@ -10,12 +10,13 @@ This is the robot's own stack, independent of the hand protocol.
 | `/arm_sdk` | `unitree_hg/LowCmd` | arm-only command interface |
 | `/hand_sdk` | `unitree_go/MotorCmds` | 1 subscriber, 0 publishers when checked |
 | `/dex3/{left,right}/{cmd,state}` (+ `/lf/dex3/*/state`, `/api/dex3_msg_controller/*`) | `unitree_hg/HandCmd`, `HandState` | Unitree Dex3 hand interface, present in the standard stack; nothing indicates that the Inspire hands use it |
+| `/utlidar/cloud_livox_mid360`, `/utlidar/imu_livox_mid360` | `sensor_msgs/PointCloud2` (10 Hz), `sensor_msgs/Imu` (200 Hz) | **the raw Livox MID-360 stream, publishing** — see [04](04-lidar-mid360.md) |
 | `/lowstate_doubleimu` | `unitree_hg_doubleimu/doubleIMUState` | IMU state |
 | `/unitree/slam_mapping/odom` | `nav_msgs/Odometry` | SLAM odometry (no data while SLAM is off) |
 | `/slam_info`, `/slam_key_info` | `std_msgs/String` | event-only SLAM status |
 | `/api/<service>/{request,response}` | `unitree_api/Request`, `Response` | RPC to Unitree services (e.g. `slam_operate`) |
-| `/unitree/slam_mapping/points`, `/unitree/slam_relocation/points` | `sensor_msgs/PointCloud2` | no publisher at the time |
-| `/utlidar/range_info` | — | no publisher at the time |
+| `/unitree/slam_mapping/points`, `/unitree/slam_relocation/points` | `sensor_msgs/PointCloud2` | only while Unitree's SLAM runs; no publisher at the time |
+| `/utlidar/range_info` | `geometry_msgs/PointStamped` | no publisher at the time |
 
 Nothing in this namespace carries the Inspire hands: they are reached directly
 over Modbus TCP ([02](02-inspire-rh56e2-hands.md)).
