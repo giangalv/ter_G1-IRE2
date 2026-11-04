@@ -1,7 +1,7 @@
 """Which palm camera belongs to which hand? Cover-the-lens test with audio cues.
 
-Streams 16x12 grayscale thumbnails of the two palm cameras (/dev/video6 = A,
-/dev/video8 = B) from the Jetson over SSH (read-only: it only opens the two
+Streams 16x12 grayscale thumbnails of the two palm cameras (A = hub port
+2.2.1, B = hub port 2.2.2, opened by their stable /dev/v4l/by-path names) from the Jetson over SSH (read-only: it only opens the two
 capture nodes) while the laptop beeps a schedule: cover the lens of the camera
 of ONE hand at the double beep, uncover it at the low beep. The camera whose
 thumbnail changes most while covered is that hand's camera.
@@ -32,7 +32,8 @@ total = 6.0 if DRY else LEAD + BASE + CYCLES * (COVER + REST) + 3.0
 REMOTE = r'''
 import cv2, sys, time
 caps = {}
-for name, idx in (("A", 6), ("B", 8)):
+for name, idx in (("A", "/dev/v4l/by-path/platform-3610000.xhci-usb-0:2.2.1:1.0-video-index0"),
+                  ("B", "/dev/v4l/by-path/platform-3610000.xhci-usb-0:2.2.2:1.0-video-index0")):
     c = cv2.VideoCapture(idx, cv2.CAP_V4L2)
     c.set(cv2.CAP_PROP_FRAME_WIDTH, 320); c.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
     caps[name] = c
@@ -128,7 +129,7 @@ refA, refB = np.median(A[base], axis=0), np.median(B[base], axis=0)
 dA = np.abs(A - refA).mean(axis=1)
 dB = np.abs(B - refB).mean(axis=1)
 noiseA, noiseB = dA[base].mean(), dB[base].mean()
-print("camera A = /dev/video6 (USB 1-2.2.1), camera B = /dev/video8 (USB 1-2.2.2)")
+print("camera A = hub port 2.2.1, camera B = hub port 2.2.2")
 print(f"baseline change vs reference (noise): A={noiseA:.1f}  B={noiseB:.1f}   [0..255 scale]")
 gains = {"A": [], "B": []}
 for c in range(CYCLES):
@@ -146,6 +147,6 @@ ra, rb = ma / max(noiseA, 0.5), mb / max(noiseB, 0.5)
 if max(ra, rb) < 2.0:
     print("=> inconclusive: neither camera changed clearly")
 elif max(ra, rb) > 2.0 * min(ra, rb) + 1.0:
-    print("=> covered camera:", "A (video6, USB 1-2.2.1)" if ra > rb else "B (video8, USB 1-2.2.2)")
+    print("=> covered camera:", "A (hub port 2.2.1)" if ra > rb else "B (hub port 2.2.2)")
 else:
     print("=> inconclusive: both changed")

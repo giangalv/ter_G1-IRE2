@@ -34,6 +34,26 @@ gateway is needed for the robot LAN.
 * Livox SDK2 libraries and headers are installed (`/usr/local/lib/liblivox_lidar_sdk_*`)
   but no lidar process runs.
 
+### Network interfaces and Unitree services on the Jetson
+
+* The robot LAN (`192.168.123.164/24`, NetworkManager profile `unitree1`) is on
+  the **onboard PCIe NIC** (driver `r8169`). The interface names are **not
+  stable across boots**: on 2026-11-04 the onboard NIC was `eth1` and the
+  "USB 10/100 LAN" adapter (QinHeng `1a86:5395`, `cdc_ether`, no carrier) was
+  `eth0`; earlier in the day it was the other way round. Select by MAC or
+  driver, never by name.
+* `master_service` (`/unitree/module/master_service`) starts and monitors the
+  Unitree services; its log is `/unitree/var/log/master_service/master_service.LOG`.
+  A service that fails to stay up is restarted every ~5 s and, after a
+  "protect count" of **30**, is **given up for good** until it is started again
+  (`mscli startservice <name>`) or the Jetson reboots with the cause fixed.
+* `video_hub_pc4` runs `videohub_pc4 /dev/video4`: it reads the **RealSense D435i
+  colour stream** (`/dev/video4`, 1920x1080 YUY2 @ 15 fps via `v4l2src`), encodes
+  it with the Jetson hardware encoder (`nvv4l2h264enc`, `nvjpegenc`) and
+  publishes it over DDS — this is what the phone app shows as video. If the
+  RealSense is not enumerated when the service starts, it dies and stays dead.
+* `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
+
 ## Talking DDS from the laptop
 
 The Unitree stack uses ROS 2 on **domain 0** with **CycloneDDS**. From a

@@ -15,8 +15,10 @@ cameras (the hands' Ethernet only carries Modbus).
 * UVC "Abham Image" (HHWei, USB id `1c45:6200`), **640×480 @ 30 fps, YUYV**, colour.
 * `/dev/v4l/by-id/*Abham*` is useless: both cameras report the **same serial
   (`HHW001`)**, so one symlink overwrites the other.
-* `/dev/videoN` numbers can change after a reboot or replug; the **by-path
-  names follow the hub port**. The left/right mapping is therefore valid only
+* `/dev/videoN` numbers can change after a reboot or replug — they **did**: after
+  two Jetson reboots on 2026-11-04 the right camera moved from `/dev/video6` to
+  `/dev/video8` and the left one the other way round. The **by-path
+  names follow the hub port** and stayed correct. The left/right mapping is therefore valid only
   while the cables stay in the same hub ports — swapping them swaps the hands.
 * OpenCV 4.2.0 on the Jetson opens them with `cv2.VideoCapture(path_or_index, cv2.CAP_V4L2)`;
   the `by-path` strings work (verified), opening takes 0.5-1 s, and the frame
@@ -32,7 +34,7 @@ cameras (the hands' Ethernet only carries Modbus).
 Cover-the-lens test with audio cues (the person at the robot cannot read the
 laptop screen): the user covered the lens of the **right** hand's camera four
 times; the mean difference of 16×12 thumbnails against the baseline was ~21×
-the noise level on `/dev/video6` and ~1.2× on `/dev/video8`. Mean *brightness*
+the noise level on hub port 2.2.1 (then `/dev/video6`) and ~1.2× on port 2.2.2 (then `/dev/video8`). Mean *brightness*
 turned out to be a bad metric (covering the lens barely changes it).
 Script: `tools/cam_cover_test.py`.
 
