@@ -92,10 +92,10 @@ tactile block without slowing the position loop.
 **Where the regions are (right hand, measured 2026-11-04 with the hand open):**
 voice-guided presses with `tools/tactile_session.py`, one finger and one spot per
 step, read-only. The rubber skin has two grip textures (user's description):
-**dots** on the palm, the fingertip, the first phalanx and the third phalanx, and
+**dots** on the palm, the fingertip and the first, second and third phalanx, and
 **lines** on the first phalanx too, but on the side that faces the neighbouring
-finger, which cannot be touched with the fingers open. The second phalanx is
-not described. The thumb looks different (not mapped yet).
+finger, which cannot be touched with the fingers open. The thumb's skin looks
+different.
 First phalanx = the one nearest the hand, third = the one with the fingerprint.
 
 | Region | Where it is | Evidence |
@@ -104,7 +104,7 @@ First phalanx = the one nearest the hand, third = the one with the fingerprint.
 | `nail` (12×8) | **palm side of the third phalanx** (the fingerprint side), not the back | pressing the fingerprint side lights it on all 5 fingers (+420 … +1730, 55-96 of 96 cells) |
 | `pad` (10×8) | **palm side of the first phalanx** (the part nearest the hand) | index +963 (80 cells), middle +826, ring +1451…1596, little +1717 |
 | `thumb_tip`, `thumb_nail` (12×8), `thumb_pad` (12×8) | same roles as on the fingers: extreme end, then the fingerprint side, then the part nearest the hand, along the **dotted** side | slide scan along the thumb: `thumb_tip` +315 → `thumb_nail` +763 → **nothing for about 30 % of the stroke** → `thumb_pad` +1167 |
-| `thumb_middle` (3×3) | **not located**: it did not light on the slide along the dotted side, nor on a second slide along the inner side (that one showed only the standing +100 on `thumb_tip`, and it is not certain that it was pressed) | |
+| `thumb_middle` (3×3) | the **middle of the thumb**, between the tip and the base, dotted side (a small patch: a slide along the thumb missed it) | pressed directly: +592, 5 of 9 cells, peak at the centre cell (1,1) |
 | `palm` (8×14) | palm side; the 14 columns run along the hand, **column 0 at the base of the fingers, column 13 towards the wrist**; the 8 rows across, row 7 probably on the thumb side (one press) | "near the wrist" → (3,13); "near the finger base" → (4,0); centre → (2…4, 8…12) |
 
 * **There are no sensors on the back** of the fingers: pressing the dorsum of
@@ -113,23 +113,26 @@ First phalanx = the one nearest the hand, third = the one with the fingerprint.
   (palm side) hit, in order, `index_tip` → `index_nail` → **nothing for about
   a fifth of the stroke** → `index_pad`. Row 0 of `nail` and of `pad` is on the
   fingertip side, the last row on the side of the hand. The gap is where the second
-  phalanx is: a press there is invisible to the array. Pressing the palm side of
-  the second phalanx gave nothing on the index and the middle finger; on the ring
-  and the little finger the same cue lit `pad`, probably because the press landed
-  on the edge of the first phalanx.
+  phalanx is: a press there is invisible to the array. The second phalanx has
+  the dotted skin like the others, but pressed directly (middle of the dotted
+  side) it gave nothing on the index, middle and ring finger, and +131 on two
+  cells of the last row of `nail` on the little finger (the edge next to the
+  second phalanx, coupling): **the second phalanx has no sensors.**
 * The sensors **keep a small offset after a hard press** (+20 … +60 counts, once
   +390 on `thumb_tip`), so take a baseline before every measurement.
 
 **Not verified:**
 
 * whether the sensitive areas are exactly the **dotted** zones (the data fit that
-  and not the whole sheath), and whether the **lined** side of the first phalanx
-  has sensors (not reachable with the fingers open; the `pad` region may cover
-  it). A test with the second phalanx pressed directly, one finger at a time,
-  is still to be done; the earlier try on four fingers is not usable because
-  the lined grip is not where it was asked to press;
-* where `thumb_middle` (3×3) is: the thumb's skin is laid out differently from the
-  other fingers, and its lined grip is probably the place to look;
+  and not the whole sheath). The **lined** side of the first phalanx was pressed
+  on the little finger (nothing above +20) and on the index (+35 on two edge
+  cells, column 7 of `index_pad`, probably mechanical coupling), while the
+  dotted side of the same phalanx gave +1810 and +1333 in the same run: the
+  lined grip has **no sensors of its own**. The dotted second phalanx has none
+  either, so the sensing surface is `tip`, the third and the first phalanx, and
+  the palm (plus `thumb_middle` on the thumb);
+* the thumb's lined grip and the position of its 12×8 regions along the thumb
+  (only the order tip → nail → gap → pad is known);
 * the force behind a count. There is **no usable calibration**: the sum of the
   little finger's cells did not correlate with its actuator force
   (`FORCE_ACT`, correlation 0.2), because the two measure different things.
