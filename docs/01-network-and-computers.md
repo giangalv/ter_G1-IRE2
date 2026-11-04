@@ -50,8 +50,13 @@ gateway is needed for the robot LAN.
 * `video_hub_pc4` runs `videohub_pc4 /dev/video4`: it reads the **RealSense D435i
   colour stream** (`/dev/video4`, 1920x1080 YUY2 @ 15 fps via `v4l2src`), encodes
   it with the Jetson hardware encoder (`nvv4l2h264enc`, `nvjpegenc`) and
-  publishes it over DDS — this is what the phone app shows as video. If the
-  RealSense is not enumerated when the service starts, it dies and stays dead.
+  publishes it over DDS — presumably what the phone app shows as video
+  (not verified). On 2026-11-04 it was dead: it exited right after every start
+  since at least 19:26, the master gave up (protect count 30), and the
+  RealSense colour node `/dev/video4` only appeared at 19:59 (its USB cable
+  had apparently been unplugged until then). A manual 5-frame
+  `gst-launch-1.0 v4l2src device=/dev/video4 ! video/x-raw,format=YUY2,width=1920,height=1080,framerate=15/1`
+  worked, so the camera itself was fine at that point; the exit cause is unknown.
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
 ## Talking DDS from the laptop
