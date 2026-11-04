@@ -7,11 +7,6 @@ all of it from a laptop. Everything here was measured on the real robot
 (hanging on its support stand) on **2026-11-04**; each page says what is
 verified and what is only a hypothesis.
 
-> **Safety first.** The robot was on its stand and *nothing was ever written to
-> the hands or the arms* while collecting this. All tools in `tools/` are
-> read-only except where stated. Fingers are locked when the hand is powered:
-> never pull them by force.
-
 ## Contents
 
 | Page | What it covers |
