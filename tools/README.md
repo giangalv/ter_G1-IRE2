@@ -12,6 +12,9 @@ Small scripts used to map the robot. Python 3, standard library + `numpy`
 | `cam_cover_test.py LEAD CYCLES` | Left/right test for the palm cameras: streams thumbnails from the Jetson over SSH while the laptop beeps; needs `G1_PW`, `play` (sox) and `askpass.sh` | no (opens the two video nodes) |
 | `lidar_listen.py [SECONDS]` | Subscribes to `/utlidar/*_livox_mid360`, prints rates, cloud layout and valid-point stats, saves one cloud to `lidar_cloud.npz` | no |
 | `slam_call.py API_ID 'JSON'` | Sends **one** `unitree_api` request to `/api/slam_operate`; `--dry` only checks that someone listens | **yes** (one SLAM request) |
+| `tactile_session.py HOST SECS LABEL...` | Voice-guided press test: a 2 s baseline, then for every LABEL it speaks the cue (Italian, `spd-say`), beeps (`play`/sox), records `SECS` and prints the regions that rose above the baseline, with the peak cell | no |
+| `slide_scan.py HOST SECS LABEL ...` | Same for a slow slide of a finger along the hand: prints, every 0.5 s, the active region, rows and columns | no |
+| `open_hand.py HOST` | Opens **one** hand slowly: `SPEED_SET` 300, `ANGLE_SET` 1000 (thumb rotation kept), aborts and holds if `ERROR` ≠ 0 or `FORCE_ACT` > 700, restores `SPEED_SET` 1000 | **yes** (`SPEED_SET`, `ANGLE_SET`) |
 | `askpass.sh` | `SSH_ASKPASS` helper: prints `$G1_PW` so `ssh` can log in non-interactively | — |
 
 Examples:

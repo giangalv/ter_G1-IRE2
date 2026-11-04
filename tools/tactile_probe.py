@@ -45,7 +45,7 @@ def recv_exact(sock, size):
 
 def read_words(sock, tid, address, count):
     """Function 0x03 read of `count` registers at an EVEN byte address."""
-    sock.sendall(struct.pack(">HHHBBHH", tid, 0, 6, UNIT, 0x03, address, count))
+    sock.sendall(struct.pack(">HHHBBHH", tid & 0xFFFF, 0, 6, UNIT, 0x03, address, count))
     header = recv_exact(sock, 7)
     length = struct.unpack(">H", header[4:6])[0]
     body = recv_exact(sock, length - 1)

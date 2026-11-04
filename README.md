@@ -41,8 +41,8 @@ all of it from a laptop. Everything here was measured on the real robot
 
 ## Open questions
 
-* Tactile (`T1`): the layout (17 regions, 1062 cells) is **decoded and confirmed on the right little finger**, but the physical position of each region and the force per count are not verified (no calibration).
-* The **write path** of the hands (set angle / force) is **untested** on hardware.
+* Tactile (`T1`): the layout (17 regions, 1062 cells) is decoded and the regions are **located on the right hand** (`tip` = extreme end, `nail` = fingerprint side, `pad` = part nearest the hand, `palm`; nothing on the back or on the second phalanx). Still open: the left hand, `thumb_middle`, and the force per count (no calibration).
+* The **write path** works for `SPEED_SET` and `ANGLE_SET` on the right hand (opened once, see [docs/02](docs/02-inspire-rh56e2-hands.md)); `FORCE_SET` has never been written and the left hand has not been written at all.
 * The `livox_frame` → robot-base transform of the LiDAR is unknown; the SLAM service did not answer one start request.
 * Force units of `FORCE_ACT` (grams?) are assumed, not verified.
 

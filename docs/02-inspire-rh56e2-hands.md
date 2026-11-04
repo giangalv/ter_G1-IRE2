@@ -17,8 +17,10 @@ Do not assume the opposite: the Unitree convention would have suggested it.
 
 * TCP **6000** is open on both hands, **502 is closed**. Unit id **1**.
 * Function **0x03** (read holding registers) verified. Function **0x10**
-  (write multiple registers) is the expected write path but is **not verified**
-  on hardware.
+  (write multiple registers) verified on the **right hand** on 2026-11-04: one
+  write of `SPEED_SET` (300) and one of `ANGLE_SET` (open), both echoed
+  `(address, count)` and read back exactly (`tools/open_hand.py`). Nothing else
+  was ever written, and nothing at all on the left hand.
 * The `HAND_ID` register reads `1` on both hands (it is the Modbus slave id, it
   does *not* tell the hand model).
 
@@ -87,15 +89,53 @@ right: the thumb rests against something in the closed fist).
 **two simultaneous Modbus clients**, so a second connection can read the
 tactile block without slowing the position loop.
 
+**Where the regions are (right hand, measured 2026-11-04 with the hand open):**
+voice-guided presses with `tools/tactile_session.py`, one finger and one spot per
+step, read-only. The rubber skin has two grip textures (user's description):
+**dots** on the palm, the fingertip, the first phalanx and the third phalanx, and
+**lines** on the first phalanx too, but on the side that faces the neighbouring
+finger, which cannot be touched with the fingers open. The second phalanx is
+not described. The thumb looks different (not mapped yet).
+First phalanx = the one nearest the hand, third = the one with the fingerprint.
+
+| Region | Where it is | Evidence |
+|---|---|---|
+| `tip` (3×3) | the **extreme end** of the finger | press with a nail on the very end: index +2396, ring +1099, middle +929, little +1204, thumb +1104; all 9 cells react, peak near the centre cell |
+| `nail` (12×8) | **palm side of the third phalanx** (the fingerprint side), not the back | pressing the fingerprint side lights it on all 5 fingers (+420 … +1730, 55-96 of 96 cells) |
+| `pad` (10×8) | **palm side of the first phalanx** (the part nearest the hand) | index +963 (80 cells), middle +826, ring +1451…1596, little +1717 |
+| `thumb_tip`, `thumb_nail` (12×8), `thumb_pad` (12×8) | same roles as on the fingers: extreme end, then the fingerprint side, then the part nearest the hand, along the **dotted** side | slide scan along the thumb: `thumb_tip` +315 → `thumb_nail` +763 → **nothing for about 30 % of the stroke** → `thumb_pad` +1167 |
+| `thumb_middle` (3×3) | **not located**: it did not light on the slide along the dotted side, nor on a second slide along the inner side (that one showed only the standing +100 on `thumb_tip`, and it is not certain that it was pressed) | |
+| `palm` (8×14) | palm side; the 14 columns run along the hand, **column 0 at the base of the fingers, column 13 towards the wrist**; the 8 rows across, row 7 probably on the thumb side (one press) | "near the wrist" → (3,13); "near the finger base" → (4,0); centre → (2…4, 8…12) |
+
+* **There are no sensors on the back** of the fingers: pressing the dorsum of
+  index, ring, middle and thumb produced nothing.
+* **Not the whole finger is sensitive.** A slow slide of a fingertip along the index
+  (palm side) hit, in order, `index_tip` → `index_nail` → **nothing for about
+  a fifth of the stroke** → `index_pad`. Row 0 of `nail` and of `pad` is on the
+  fingertip side, the last row on the side of the hand. The gap is where the second
+  phalanx is: a press there is invisible to the array. Pressing the palm side of
+  the second phalanx gave nothing on the index and the middle finger; on the ring
+  and the little finger the same cue lit `pad`, probably because the press landed
+  on the edge of the first phalanx.
+* The sensors **keep a small offset after a hard press** (+20 … +60 counts, once
+  +390 on `thumb_tip`), so take a baseline before every measurement.
+
 **Not verified:**
 
-* which physical part of the finger each region covers (the names are the
-  manual's; "nail" and "pad" may not be where the words suggest);
+* whether the sensitive areas are exactly the **dotted** zones (the data fit that
+  and not the whole sheath), and whether the **lined** side of the first phalanx
+  has sensors (not reachable with the fingers open; the `pad` region may cover
+  it). A test with the second phalanx pressed directly, one finger at a time,
+  is still to be done; the earlier try on four fingers is not usable because
+  the lined grip is not where it was asked to press;
+* where `thumb_middle` (3×3) is: the thumb's skin is laid out differently from the
+  other fingers, and its lined grip is probably the place to look;
 * the force behind a count. There is **no usable calibration**: the sum of the
   little finger's cells did not correlate with its actuator force
   (`FORCE_ACT`, correlation 0.2), because the two measure different things.
   Press a known weight on a known region to calibrate;
-* the palm and the thumb regions were never touched on purpose.
+* the **left hand** (same layout assumed, only the right was mapped);
+* the left/right orientation of the columns of `nail`/`pad` and of the palm rows.
 
 Tool: `tools/tactile_probe.py HOST [SECONDS] [--map]` prints the active regions
 every second and draws a heat map of the most active one.
@@ -103,8 +143,13 @@ every second and draws a heat map of the most active one.
 ## What is known to be safe
 
 * Reads (0x03) at even addresses < 6000: always; used extensively.
-* Nothing was ever written. Do not write before checking `FORCE_SET`
-  (factory 2000) and the pose, and keep a hand on the robot's stand/e-stop.
+* The only writes so far are the ones of `tools/open_hand.py` on the right hand:
+  `SPEED_SET` 300 then `ANGLE_SET` 1000 (thumb rotation kept at its current
+  value). All fingers reached 996-998 in about 2 s with `ERROR` = 0 and the forces
+  falling to ~0; `SPEED_SET` was restored to 1000 afterwards. Before writing,
+  check `ERROR`, `FORCE_SET` (factory 2000) and the pose, keep the fingers of the
+  people clear of the hand, and remember that `SPEED_SET` 300 is not slow (the
+  whole stroke took about 2 s).
 
 ## Tools
 
