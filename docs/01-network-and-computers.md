@@ -133,11 +133,22 @@ gateway is needed for the robot LAN.
   cause 1 still applies. Nothing under `/unitree` was changed and no persistent
   change was made. A reboot, or `mscli startservice video_hub_pc4`, restarts the
   hub with the stock config, which fails as in cause 1.
-* **What would fix it (needs root on the Jetson, none applied):** causes 1 and 2: a
-  udev rule that pins the PCIe NIC to `eth0` and the USB adapter to another name (the
-  profile `unitree1` is not bound to an interface name or MAC, so it follows). Cause
-  3 has no software fix found: it needs the physical link checked first, because
-  without a stable USB 3 link the NIC fix alone will not bring the video back.
+* **Fix for causes 1 and 2, installed 2026-11-05 (reboot test pending):**
+  `/etc/udev/rules.d/71-g1-robot-lan.rules` (a new file, nothing else was edited):
+  ```
+  SUBSYSTEM=="net", DRIVERS=="cdc_ether", NAME="ethusb0"
+  SUBSYSTEM=="net", KERNELS=="0008:01:00.0", NAME="eth0"
+  ```
+  The PCIe NIC (`r8169`, PCI `0008:01:00.0`, the robot LAN) is always `eth0`, as the
+  image's own `/etc/network/devnames` says (`eth0:Realtek ... PCI Express`), and any
+  USB LAN adapter gets `ethusb0`. A `udevadm test` dry run assigned exactly these
+  names; the running interfaces were not renamed (they are up), so it takes effect
+  at the next boot. The NetworkManager profile `unitree1` is bound to neither a name
+  nor a MAC, so it follows the NIC. If the rename ever fails the NIC keeps a kernel
+  name and the robot LAN still comes up, exactly as before the rule.
+  Revert: delete the file and reboot. The stock `cyclonedds.xml` and the binary
+  are unchanged and need no edit once `eth0` is the robot LAN.
+  Cause 3 was a faulty connector, fixed by moving the cable (see above).
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
 ## Talking DDS from the laptop
