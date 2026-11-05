@@ -201,6 +201,10 @@ Things to know:
   2026-11-05 and the Jetson was unreachable over the cable after two boots (cause not established, see
   above), so it is **not** installed. Do not retry it without a monitor and keyboard on the Jetson.
 
+**Not together with the RealSense driver:** `tools/realsense_ros2.sh start` (docs/06) stops this video, because the
+camera cannot be shared (`videohub_pc4_patched` died as soon as the driver opened it). Run `realsense_ros2.sh stop`
+before `start_app_video.sh start`.
+
 ## Talking DDS from the laptop
 
 The Unitree stack uses ROS 2 on **domain 0** with **CycloneDDS**. From a

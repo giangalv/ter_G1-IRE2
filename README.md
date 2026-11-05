@@ -15,6 +15,7 @@ all of it from a laptop. Everything here was measured on the real robot
 | [docs/03-palm-cameras.md](docs/03-palm-cameras.md) | The two palm-facing USB cameras: devices, stable names, left/right mapping |
 | [docs/04-lidar-mid360.md](docs/04-lidar-mid360.md) | Livox MID-360 in the head: address, **the DDS topics that carry its point cloud (10 Hz) and IMU (200 Hz)** |
 | [docs/05-unitree-dds.md](docs/05-unitree-dds.md) | Native Unitree topics seen over DDS (arms, hands, SLAM API) |
+| [docs/06-realsense-ros2.md](docs/06-realsense-ros2.md) | D435i depth + colour as ROS 2 topics: driver built on the Jetson, why it needs its own DDS domain, why the app video stops |
 | [tools/](tools/README.md) | Small scripts used to find all of the above |
 
 ## The robot at a glance
@@ -38,6 +39,7 @@ all of it from a laptop. Everything here was measured on the real robot
 | Head camera | Intel RealSense D435i on the Jetson |
 | Robot middleware | Unitree stack on ROS 2 DDS **domain 0** (CycloneDDS) |
 | Head camera / app video | D435i → Jetson service `video_hub_pc4`; the app shows it only after `tools/start_app_video.sh start` on each boot (see [01](docs/01-network-and-computers.md#phone-app-video-after-every-boot)) |
+| Head camera depth / ROS 2 | `tools/realsense_ros2.sh install` once, then `start`: RealSense driver (ROS 2 Foxy) on the Jetson in DDS domain 42; stops the app video (see [06](docs/06-realsense-ros2.md)) |
 
 ## Open questions
 
