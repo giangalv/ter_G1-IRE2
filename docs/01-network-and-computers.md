@@ -133,7 +133,7 @@ gateway is needed for the robot LAN.
   cause 1 still applies. Nothing under `/unitree` was changed and no persistent
   change was made. A reboot, or `mscli startservice video_hub_pc4`, restarts the
   hub with the stock config, which fails as in cause 1.
-* **Fix for causes 1 and 2, installed 2026-11-05 (reboot test failed, see below):**
+* **Fix for causes 1 and 2, tried 2026-11-05 and removed (see the test below):**
   `/etc/udev/rules.d/71-g1-robot-lan.rules` (a new file, nothing else was edited):
   ```
   SUBSYSTEM=="net", DRIVERS=="cdc_ether", NAME="ethusb0"
@@ -145,18 +145,28 @@ gateway is needed for the robot LAN.
   names; the running interfaces were not renamed (they are up), so it takes effect
   at the next boot. The NetworkManager profile `unitree1` is bound to neither a name
   nor a MAC, so it was expected to follow the NIC.
-  **Reboot test, 2026-11-05 ~19:00 Jetson time: FAILED.** After `systemctl reboot` the
-  Jetson did not answer on `192.168.123.164` (ARP incomplete, no IPv6 link-local
-  either, its MAC never seen on the cable) for more than 11 minutes, while PC1, the
-  LiDAR and both hands answered and the Jetson's own Wi-Fi hotspot
-  (`G1-NX-AP-...`) was visible. So it is up but its wired NIC has no usable address.
-  Cause not yet known; the rule is the first suspect (a profile such as
-  `Wired connection N` may now match `eth0` instead of `unitree1`, or the NIC did
-  not come up). The earlier claim that a failed rename would leave things as before
-  was wrong. Recovery needs a way into the Jetson that is not the cable: its hotspot
-  (`10.42.0.1`) or a monitor and keyboard; then `sudo nmcli connection up unitree1
-  ifname eth0` to test the profile, or delete the rule and reboot.
-  Revert: delete the file and reboot. The stock `cyclonedds.xml` and the binary
+  **Reboot test, 2026-11-05 ~19:00 Jetson time: the Jetson was unreachable over the
+  cable after the first two boots with the rule** (more than 11 minutes on `.164`, ARP
+  incomplete, no IPv6 link-local, its MACs never seen, while PC1, the LiDAR and both
+  hands answered). Recovery needed a monitor and keyboard: the rule was deleted and the
+  Jetson rebooted, and then it answered again on the cable. **Cause not established.**
+  A photo of the console taken on the *third* boot, with the rule still in place, shows
+  `ethusb0` DOWN, `eth0` UP with `192.168.123.164/24` and the NetworkManager profile
+  `unitree1` active on `eth0`: on the Jetson side the rename and the profile were
+  fine, which contradicts the guess that another profile had taken the NIC. Whether
+  the laptop could reach it on that boot was not measured, and the logs of the failed
+  boots are gone (the journal is volatile: there is no `/var/log/journal`). So the rule
+  is the only change that coincides with the outage, but it is not proven to be the
+  cause. The earlier claim that a failed rename would leave things as before was
+  never tested.
+  Revert: delete the file and reboot. To test again, first make the journal
+  persistent (`mkdir -p /var/log/journal`, restart `systemd-journald`), keep a monitor
+  and keyboard attached, and watch `192.168.123.164` from the laptop.
+  After the rule was removed (boot of 20:15 Jetson time) the names are as before
+  (`eth1` = `r8169` with `.164`, `eth0` = the USB adapter, down), the D435i is on
+  `2-2.3` at 5000 Mbit/s with no reset, and `video_hub_pc4` runs with the stock config
+  but sends **no RTP** to the LAN (0 packets in 15 s: `multicast-iface=eth0` is the
+  unplugged USB adapter). The stock `cyclonedds.xml` and the binary
   are unchanged and need no edit once `eth0` is the robot LAN.
   Cause 3 was a faulty connector, fixed by moving the cable (see above).
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
