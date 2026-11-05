@@ -33,8 +33,34 @@ frame showed the walls and furniture of the room, so it is a real scan.
 The IMU's `orientation` is all zeros (not provided) and its angular velocity is
 filled in; the linear acceleration was not inspected.
 
-Not known yet: the transform `livox_frame` → robot base (no TF is published for
-it), so the cloud is in the sensor frame.
+The transform `livox_frame` → robot base is not published by the robot; the URDF's `mid360_link` fits the
+orientation (see below), the translation is unverified.
+
+## No cloud? The `lidar_driver` service must be on (2026-11-05)
+
+On 2026-11-05 after a reboot **no** `/utlidar/*` topic had a publisher (also the IMU one was gone, `lidar_listen.py`
+got 0 messages in 10 s) while the LiDAR (.120), PC1 and the Jetson answered ping. The cause was a **service switched
+off**: in the phone app, *Service Status* (colours: blue Functional, red Abnormal, grey Close) listed `lidar_driver`
+(and `ota_box`) as Close. The user switched them on in the app and within seconds the topics were back:
+
+| Topic | Rate measured | Note |
+|---|---|---|
+| `/utlidar/cloud_livox_mid360` | 10.0 Hz | 20064 points, 9542 with range > 5 cm, median 2.2 m, max 16.9 m |
+| `/utlidar/imu_livox_mid360` | 200.0 Hz | `linear_acceleration` is in **g** (|a| = 1.004), not m/s^2 |
+
+Check first with `ros2 topic list -v | grep utlidar` (a subscriber without publisher means the driver is off).
+
+**Mounting, verified with the IMU.** At rest the IMU read `a = (-0.043, 0.003, -1.003)` g, i.e. gravity "up" is the
+sensor's **-z**: the MID-360 is mounted upside down, tilted a few degrees. The URDF's `mid360_link`
+(`rpy = π 0.051 0` on the head) predicts `(-0.051, 0, -0.999)`: the orientation of `livox_frame` = `mid360_link` is
+confirmed to ~0.5 degrees. The translation (0.47 m above the pelvis in the URDF) is not verified; the cloud has a
+dense horizontal layer 1.2-1.4 m on the sensor's +z side (= below the head), compatible with the floor.
+
+Services listed by the app on that day, all Functional after the switch (versions as shown): ai_sport 8.7.5.212,
+audio_player_service, bashrunner 1.1.1.2, basic_service 3.0.0.18, battery_guard 1.0.0.9, chat_go 1.9.5.26,
+dex3_service_l, dex3_service_r, emergency_stop 1.0.0.4, g1_arm_example 2.0.2.5, lidar_driver 1.0.0.12,
+log_system 2.0.0.11, motion_switcher 1.0.0.1, net_switcher 1.0.2.1, ota_box, ota_pipe, robot_state 3.0.0.8,
+robot_type_service 1.0.2.8, state_estimator 2.0.0.25.
 
 ## What I got wrong first
 
