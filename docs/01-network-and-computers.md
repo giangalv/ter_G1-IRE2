@@ -72,8 +72,8 @@ gateway is needed for the robot LAN.
      received it (8 Mbit/s, ~15 frames/s, payload type 96, from `.164`) and the DDS
      topics `/frontvideostream` (`unitree_go/msg/Go2FrontVideoData`),
      `/api/videohub/{request,response}` and `/videohub/inner` appeared.
-  3. **The camera's USB 3 link keeps being reset by the kernel — NOT solved, and
-     probably hardware (checked with root on 2026-11-05).** Even with 1 and 2 fixed,
+  3. **The camera's USB 3 link keeps being reset by the kernel — traced to one hub
+     port (checked with root on 2026-11-05; fixed by moving the cable, see the result below).** Even with 1 and 2 fixed,
      the hub stops after 26-90 s: either it aborts (`v4l2src0` reports
      `poll error 1: Invalid argument`, then `Failed to allocate a buffer`,
      `streaming stopped, reason error (-5)`, and the program calls `g_error`), or it
@@ -108,6 +108,22 @@ gateway is needed for the robot LAN.
      Cheap physical tests: reseat the camera's USB-C cable at both ends, try another
      USB 3 port or cable, then run the 150 s `gst-launch-1.0 v4l2src ! ... ! nvvidconv
      ! fakesink` test again and count `dmesg -T | grep 'usb 2-2.1: reset'`.
+     **Result of the port swap (2026-11-05, 18:30):** the D435i's cable is integrated in
+     the head (cannot be replaced) and is labelled USB 3.0. Moved to the connector
+     that had been powering the tactile switch (the switch now sits on the USB 2.0
+     connector, the hands stayed reachable), the camera enumerates on the **same
+     Realtek hub but on its port 3 (`2-2.3`) at 5000 Mbit/s** and is stable: two
+     150 s `gst-launch-1.0` runs with Unitree's colour pipeline survived with no
+     kernel USB event, then the patched video hub ran 150 s at 14.8-15.0 frames/s,
+     8 Mbit/s, without a gap. Only two resets happened, in the first 17 s after
+     plugging in. Same camera, same cable, same hub as on port 1 (`2-2.1`), where it
+     was reset ~46 times in 30 min: **the fault is the old connector / hub port 1**,
+     not the cable or the camera. Side findings: on a direct Jetson port
+     (`1-3`, the USB 2.0 root port 3) the camera got no SuperSpeed at all (it enumerated
+     at 480 Mbit/s, stable, but 1080p15 YUY2 does not fit; 1280x720@15 ran 100 s); the
+     palm cameras sit behind a USB 2.0-only 10-port hub (`1a86:809f`) behind hub
+     port 2, which is why they drop together. Longer runs and the phone app have
+     not been checked yet.
 * **State left on 2026-11-05:** no video service is running; `master_service` has
   given up on `video_hub_pc4` (protect count 30; it still tries every 5 s and fails
   at once) and on `video_hub_pc4_chest`, which has no camera on this unit and died on
