@@ -171,6 +171,36 @@ gateway is needed for the robot LAN.
   Cause 3 was a faulty connector, fixed by moving the cable (see above).
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
+## Phone-app video after every boot
+
+The Unitree phone app shows the head camera only if you do one thing **after each boot of
+the robot** (the project itself does not need the app, so this is optional):
+
+```bash
+# from the laptop on the robot LAN (192.168.123.x); password of the Jetson user "unitree"
+ssh unitree@192.168.123.164 'bash -s -- start' < tools/start_app_video.sh
+```
+
+Why: the stock `video_hub_pc4` pins the NIC name `eth0` (in its `cyclonedds.xml` and inside
+the binary), but on this Jetson the robot LAN NIC is `eth0` or `eth1` depending on the boot, so
+the stock service either dies or runs and sends nothing (checked: 0 RTP packets on a boot where it
+stayed alive). The script stops the stock service through `/unitree/sbin/mscli`, patches one copy of
+the binary in `/tmp` (same length, `multicast-iface=<the NIC that has 192.168.123.164>`, the original is
+untouched) and starts it with the DDS interface chosen by address. Nothing persistent changes; a
+reboot undoes it. Tested 2026-11-05: 7.7-7.9 Mbit/s, 14.4-14.9 frames/s of RTP H.264 on
+`230.1.1.1:1720`, the app showed the video. `bash start_app_video.sh stop` stops the copy and leaves
+the stock service off until the next boot.
+
+Things to know:
+
+* The D435i must be on the working connector (the Realtek hub port 3, `2-2.3`, 5000 Mbit/s; see
+  cause 3 above). On a direct Jetson port it gets only USB 2.0 and 1080p15 does not fit.
+* The two palm cameras drop for 1-2 s when the head stream starts
+  ([03](03-palm-cameras.md)).
+* A udev rule that pins the robot NIC to `eth0` would remove the need for the script. It was tried on
+  2026-11-05 and the Jetson was unreachable over the cable after two boots (cause not established, see
+  above), so it is **not** installed. Do not retry it without a monitor and keyboard on the Jetson.
+
 ## Talking DDS from the laptop
 
 The Unitree stack uses ROS 2 on **domain 0** with **CycloneDDS**. From a

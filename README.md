@@ -37,7 +37,7 @@ all of it from a laptop. Everything here was measured on the real robot
 | LiDAR | Livox MID-360, Ethernet, `192.168.123.120`; cloud 10 Hz + IMU 200 Hz on DDS `/utlidar/*_livox_mid360` |
 | Head camera | Intel RealSense D435i on the Jetson |
 | Robot middleware | Unitree stack on ROS 2 DDS **domain 0** (CycloneDDS) |
-| Head camera / app video | D435i → Jetson service `video_hub_pc4` (see [01](docs/01-network-and-computers.md)) |
+| Head camera / app video | D435i → Jetson service `video_hub_pc4`; the app shows it only after `tools/start_app_video.sh start` on each boot (see [01](docs/01-network-and-computers.md#phone-app-video-after-every-boot)) |
 
 ## Open questions
 

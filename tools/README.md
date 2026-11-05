@@ -15,6 +15,7 @@ Small scripts used to map the robot. Python 3, standard library + `numpy`
 | `tactile_session.py HOST SECS LABEL...` | Voice-guided press test: a 2 s baseline, then for every LABEL it speaks the cue (Italian, `spd-say`), beeps (`play`/sox), records `SECS` and prints the regions that rose above the baseline, with the peak cell | no |
 | `slide_scan.py HOST SECS LABEL ...` | Same for a slow slide of a finger along the hand: prints, every 0.5 s, the active region, rows and columns | no |
 | `open_hand.py HOST` | Opens **one** hand slowly: `SPEED_SET` 300, `ANGLE_SET` 1000 (thumb rotation kept), aborts and holds if `ERROR` ≠ 0 or `FORCE_ACT` > 700, restores `SPEED_SET` 1000 | **yes** (`SPEED_SET`, `ANGLE_SET`) |
+| `start_app_video.sh start\|stop\|status` | **Runs on the Jetson.** Makes the phone app show the head camera after a boot: stops the stock `video_hub_pc4`, runs a patched copy in `/tmp` that streams on the right NIC (see docs/01) | **yes** (stops/starts a Unitree service; nothing persistent) |
 | `askpass.sh` | `SSH_ASKPASS` helper: prints `$G1_PW` so `ssh` can log in non-interactively | — |
 
 Examples:
