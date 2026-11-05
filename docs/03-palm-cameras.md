@@ -38,6 +38,20 @@ the noise level on hub port 2.2.1 (then `/dev/video6`) and ~1.2× on port 2.2.2 
 turned out to be a bad metric (covering the lens barely changes it).
 Script: `tools/cam_cover_test.py`.
 
+## They drop out for ~1-2 s when the head camera starts streaming
+
+Measured 2026-11-05 with root (`dmesg -T`): the two palm cameras (`1-2.2.1` and
+`1-2.2.2`, both behind the 10-port USB 2.0 hub `1a86:809f`) disconnect **together**
+and re-enumerate 1-2 s later each time a stream of the D435i is started, 8-10 s
+after the start, 7 times out of 7 (the video hub, `gst-launch-1.0` test runs, and
+also with the D435i on a USB 2.0 port). While the D435i keeps streaming, no further
+drop (13 min and counting). They come back with the same `/dev/video6-9` numbers
+and the same `by-path` names, with `speed=480`, `power/control=auto`, and they
+deliver frames again (8 frames from each right after a drop). Likely a supply dip
+on the shared USB 5 V when the D435i starts streaming (not traced). So any node that
+reads them must reopen the device when it vanishes, especially right after the head
+video starts or restarts.
+
 ## Not done yet
 
 * No intrinsic calibration; no camera-to-palm extrinsics.
