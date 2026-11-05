@@ -17,13 +17,16 @@
 #    camera, videohub_pc4 died ("An error occurred!"). `start` therefore stops videohub_pc4 first (the app has no
 #    video until the next boot or until `start_app_video.sh start` after `stop` here). Colour then comes from
 #    the driver. The motion module (IMU) reports "Hardware Error" on this Jetson, so it is off.
+#  * initial_reset:=true (hardware reset of the camera when the node starts): after a robot reboot the first run
+#    lost the USB streams after ~70 s ("uvc streamer watchdog ... Device or resource busy"), the next one had
+#    no colour; with the reset both streams ran for the 3 minutes watched.
 set -u
 WS=$HOME/g1_realsense
 DOMAIN=42
 JETSON_IP=192.168.123.164
 PIDFILE=$WS/run.pid
 LOG=$WS/run.log
-DEFAULTS="enable_color:=true rgb_camera.profile:=640x360x15 enable_depth:=true depth_module.profile:=424x240x15 enable_gyro:=false enable_accel:=false"
+DEFAULTS="initial_reset:=true enable_color:=true rgb_camera.profile:=640x360x15 enable_depth:=true depth_module.profile:=424x240x15 enable_gyro:=false enable_accel:=false"
 
 env_setup() {
     set +u
@@ -82,7 +85,7 @@ XML
     # shellcheck disable=SC2086
     setsid nohup ros2 launch realsense2_camera rs_launch.py $DEFAULTS "$@" > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
-    sleep 12
+    sleep 20   # initial_reset re-enumerates the camera first (~7 s)
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "DIED, see $LOG"; fi
     grep -E "Node Is Up|Device Name|USB type|Open profile|ERROR|died" "$LOG" | grep -v hwmon | cut -c1-200 | head -8
     ;;

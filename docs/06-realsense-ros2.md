@@ -51,6 +51,19 @@ The rates of the raw `/camera/...` topics in domain 42 were not measured separat
 purpose: the laptop's UDP receive buffer is only 416 kB (`net.core.rmem_max`, no sudo), and a 1280x720 rgb8
 image is 2.7 MB per sample; larger profiles were not tried through DDS.
 
+## Freezes after a robot reboot (2026-11-05)
+
+After rebooting the robot, the first driver run streamed ~70 s and then the log filled with
+`uvc streamer watchdog triggered on endpoint 130/132`, `reset_endpoint ... Device or resource busy`
+(9600 lines in a few minutes) while the node stayed "running": the image in RViz froze. A plain restart gave depth
+but **no colour** (`Hardware Notification: Depth stream start failure` although depth arrived). Restarting with
+`initial_reset:=true` (hardware reset of the camera at node start, no root needed) gave both streams at ~10.5 Hz
+raw and no error for the 3 minutes watched; `start` now sets it by default and waits 20 s. The root cause was not
+found (`dmesg` is not readable without sudo and was not escalated); it is not `videohub_pc4` (not running).
+If it freezes again: `realsense_ros2.sh stop && realsense_ros2.sh start`, and look at `log`.
+The relay at the laptop depends on the laptop's load: with another heavy job running (load average 31, swap full)
+it dropped to ~2.5 Hz while the raw topics were still at ~10 Hz.
+
 ## Not working / not done
 
 * **IMU: no.** The motion module reports `Hardware Notification: Motion Module failure, Hardware Error`
