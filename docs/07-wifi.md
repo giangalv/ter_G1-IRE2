@@ -9,7 +9,9 @@
 * "shared" means the Jetson hands out 10.42.0.x by DHCP, forwards (`ip_forward=1`) and **masquerades** towards the
   robot LAN: a client on the AP reaches 192.168.123.x, seen as 192.168.123.164. Its default route is
   192.168.123.1 on `eth1`.
-* Another saved Wi-Fi profile on the lab laptop, `G1-NX-AP-017046`, is **a different robot's** AP.
+* The same robot has also been seen with the AP name `G1-NX-AP-017046` (a saved profile on the lab laptop): it is the
+  **same robot, the AP was renamed** (017046 -> 026047). There is no other G1 in the lab. Read the current name from
+  the Jetson (`nmcli -g 802-11-wireless.ssid connection show Hotspot-41`) instead of trusting an old profile.
 * The Jetson cannot be an AP and a client at once (one radio): to put the robot on the lab Wi-Fi the AP has to go
   down. The lab network gives public addresses (130.251.x.x) and the robot's DDS has no authentication (and a
   `bashrunner` service that runs commands), so that is **not** recommended.
