@@ -72,33 +72,56 @@ gateway is needed for the robot LAN.
      received it (8 Mbit/s, ~15 frames/s, payload type 96, from `.164`) and the DDS
      topics `/frontvideostream` (`unitree_go/msg/Go2FrontVideoData`),
      `/api/videohub/{request,response}` and `/videohub/inner` appeared.
-  3. **The camera stream stalls after a random time — NOT solved.** Even with 1 and
-     2 fixed, the hub stops after 26-90 s: either it aborts (`v4l2src0` reports
+  3. **The camera's USB 3 link keeps being reset by the kernel — NOT solved, and
+     probably hardware (checked with root on 2026-11-05).** Even with 1 and 2 fixed,
+     the hub stops after 26-90 s: either it aborts (`v4l2src0` reports
      `poll error 1: Invalid argument`, then `Failed to allocate a buffer`,
      `streaming stopped, reason error (-5)`, and the program calls `g_error`), or it
      hangs with the process alive (`v4l2src` waits in `poll()`, the per-second sample
      counters go from 15 to 0). It reproduces **without any Unitree software**:
      `gst-launch-1.0` with Unitree's pipeline and `fakesink`s died after 35 s, and
-     even `v4l2src ! queue ! nvvidconv ! fakesink` died after 15 s, while the camera
-     alone (`v4l2src ! fakesink`, 1080p YUY2 15 fps) ran 240 s clean and plain OpenCV
-     grabs work. It is not the cable or the port (USB 3, 5000 Mbit/s), the
-     temperature (53 °C), the load (0.1), the power mode (`MAXN`) or the
-     `master_service` start attempts (their timing does not match the failures).
-     Suspects that **need root** to check: the USB 3 link power management of the
-     camera (`usb3_hardware_lpm_u1=enabled`, hub `u1`+`u2` enabled,
-     `power/control=auto`, autosuspend 2000 ms — a known cause of RealSense
-     stalls on Jetsons) and the kernel log (`dmesg` is root-only).
-* **State left on 2026-11-04:** no video service is running; `master_service` has
-  given up on `video_hub_pc4` (and, from 00:39 Jetson time, on
-  `video_hub_pc4_chest`, which has no camera on this unit and died about a minute
-  after the experiment with the copy started; the link is unknown). Nothing under
-  `/unitree` was changed. A reboot, or `mscli startservice video_hub_pc4`, restarts it
-  with the stock config, which fails as in cause 1.
-* **What would fix it (all need root on the Jetson, none applied):** a udev rule
-  that pins the PCIe NIC to `eth0` and the USB adapter to another name (the
-  profile `unitree1` is not bound to an interface name or MAC, so it follows), which
-  fixes causes 1 and 2 at once; and, for cause 3, `power/control=on` on the camera
-  and its hub (a udev rule for `8086:0b3a`) after reading `dmesg` during a stall.
+     even `v4l2src ! queue ! nvvidconv ! fakesink` died after 15-78 s, while the camera
+     alone (`v4l2src ! fakesink`, 1080p YUY2 15 fps) ran 240 s clean once. What the
+     kernel log (`dmesg -T`, root) shows:
+     * every failure coincides with `usb 2-2.1: Disable of device-initiated U1 failed`
+       / `... U2 failed` and `usb 2-2.1: reset SuperSpeed Gen 1 USB device number N
+       using tegra-xusb` (the D435i is `2-2.1`, on the Realtek RTS5411 4-port USB 3.0
+       hub `0bda:0411` = `2-2`; the U1/U2 lines suggest it no longer answered control
+       requests when the kernel went to reset it, but the cause was not traced);
+     * the resets happen **with nothing using the camera**: 43 resets and 3
+       disconnects of `2-2.1` in the first 25 minutes after a boot, five of them in a
+       single 30 s window of pure idle. No process had a `/dev/video*` or
+       `/dev/bus/usb` node open, no new process was started in a 30 s window, the
+       `kworker` doing it is `usb_hub_wq`, no Unitree script mentions a USB reset.
+       The resets already happened right after boot (17:46) while `master_service`
+       was restarting `video_hub_pc4`, before any experiment of mine;
+     * the two palm cameras (`1c45:6200`, `1-2.2.1` and `1-2.2.2`) also drop off
+       the bus, **both at once** (7 disconnect events in the same 25 minutes);
+     * the xHCI root port towards the hub stays `U0`, `over_current_count` is 0 on
+       every port, the temperatures are 46-49 °C and the camera enumerates at
+       5000 Mbit/s, so the fault is on the hub ↔ camera side.
+     Tried and **ruled out**: USB 3 link power management and autosuspend. With
+     `usb3_lpm_permit=0` and `power/control=on` on `2-2.1` and on the hub `2-2`
+     (non-persistent, restored afterwards) the same pipeline died after 78 s with the
+     same reset, and a second run 3 s later after 6 s with a full USB disconnect. Left as the most likely causes, none testable by software: the USB 3
+     cable or its connectors (it runs through the neck), the hub, or the D435i unit.
+     Cheap physical tests: reseat the camera's USB-C cable at both ends, try another
+     USB 3 port or cable, then run the 150 s `gst-launch-1.0 v4l2src ! ... ! nvvidconv
+     ! fakesink` test again and count `dmesg -T | grep 'usb 2-2.1: reset'`.
+* **State left on 2026-11-05:** no video service is running; `master_service` has
+  given up on `video_hub_pc4` (protect count 30; it still tries every 5 s and fails
+  at once) and on `video_hub_pc4_chest`, which has no camera on this unit and died on
+  2026-11-04 about a minute after the experiment with the copy started (the link is
+  unknown). After the reboot on 2026-11-05 the names are as before: `eth1` = the
+  `r8169` NIC with the robot LAN, `eth0` = the `cdc_ether` USB adapter (down), so
+  cause 1 still applies. Nothing under `/unitree` was changed and no persistent
+  change was made. A reboot, or `mscli startservice video_hub_pc4`, restarts the
+  hub with the stock config, which fails as in cause 1.
+* **What would fix it (needs root on the Jetson, none applied):** causes 1 and 2: a
+  udev rule that pins the PCIe NIC to `eth0` and the USB adapter to another name (the
+  profile `unitree1` is not bound to an interface name or MAC, so it follows). Cause
+  3 has no software fix found: it needs the physical link checked first, because
+  without a stable USB 3 link the NIC fix alone will not bring the video back.
 * `video_hub_pc4_chest` runs on `/dev/video10`, which does not exist on this unit.
 
 ## Talking DDS from the laptop
