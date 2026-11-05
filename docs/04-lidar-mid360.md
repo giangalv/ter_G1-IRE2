@@ -50,6 +50,16 @@ off**: in the phone app, *Service Status* (colours: blue Functional, red Abnorma
 
 Check first with `ros2 topic list -v | grep utlidar` (a subscriber without publisher means the driver is off).
 
+**Without the app** (`tools/g1_service.py`, `tools/g1_up.sh`): the app's switch is the `ServiceSwitch` call of the
+`robot_state` service (unitree_ros2 `ros2_robot_state_client.h`: request on `/api/robot_state/request`, api 1001 with
+`{"name": NAME, "switch": 0|1}`; api 1003 lists the services). `g1_service.py list` returned 30 services with
+`status` and `protect`; **status 0 = running, 1 = stopped** (checked: switched off in the app -> `lidar_driver` 1 and no
+data; `g1_service.py on lidar_driver` -> response `status 0`, cloud 10 Hz and IMU ~190 Hz again within seconds).
+The switch does not survive a robot reboot (it was Close again after one), so `g1_up.sh` repeats it from the laptop.
+The list also holds services the app does not show (`auto_test_arm`, `auto_test_low`, `unistore`, `unitree_slam`,
+`vui_service`, `video_hub_pc4`, `video_hub_pc4_chest`, `webrtc_*`); `protect=1` on `basic_service`, `robot_state` and
+two `webrtc_*`.
+
 **Mounting, verified with the IMU.** At rest the IMU read `a = (-0.043, 0.003, -1.003)` g, i.e. gravity "up" is the
 sensor's **-z**: the MID-360 is mounted upside down, tilted a few degrees. The URDF's `mid360_link`
 (`rpy = π 0.051 0` on the head) predicts `(-0.051, 0, -0.999)`: the orientation of `livox_frame` = `mid360_link` is
