@@ -4,6 +4,7 @@
 #   tools/realsense_ros2.sh install      once: clone realsense-ros 4.0.4 here, copy it to the Jetson, build it there
 #   tools/realsense_ros2.sh start [launch args]   e.g. start enable_color:=true (stop the app video first)
 #   tools/realsense_ros2.sh stop | status | log
+#   tools/realsense_ros2.sh autostart on|off|status   start the driver by itself at every Jetson boot (user crontab @reboot)
 #
 # Needs: ssh access to unitree@192.168.123.164 (override with G1_JETSON_SSH="ssh other@host"), git, tar.
 # Everything lands in /home/unitree/g1_realsense on the Jetson. See docs/06-realsense-ros2.md.
@@ -29,7 +30,19 @@ install)
 start | stop | status | log)
     remote "$@"
     ;;
+autostart)
+    case "${2:-status}" in
+    on)
+        $JETSON_SSH 'mkdir -p ~/g1_realsense && cat > ~/g1_realsense/realsense_ros2_remote.sh && chmod +x ~/g1_realsense/realsense_ros2_remote.sh' < "$HERE/realsense_ros2_remote.sh"
+        $JETSON_SSH 'bash ~/g1_realsense/realsense_ros2_remote.sh autostart-on'
+        ;;
+    off | status)
+        remote "autostart-$2"
+        ;;
+    *) echo "usage: $0 autostart on|off|status"; exit 2 ;;
+    esac
+    ;;
 *)
-    echo "usage: $0 install|start [launch args]|stop|status|log"; exit 2
+    echo "usage: $0 install|start [launch args]|stop|status|log|autostart on|off|status"; exit 2
     ;;
 esac

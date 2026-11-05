@@ -6,6 +6,8 @@
 #   build            colcon build of the wrapper (sources already in ~/g1_realsense/src)
 #   start [args]     run the driver in the background; args are `ros2 launch` args, they win over the defaults
 #   stop | status | log
+#   boot             what the @reboot cron entry runs: wait for the LAN address, then `start` (one retry)
+#   autostart-on | autostart-off | autostart-status   add / remove / show that crontab entry (user crontab, no root)
 #
 # Why it looks like this (docs/06-realsense-ros2.md):
 #  * the Jetson has ROS 2 Foxy and no internet. The wrapper is realsense-ros 4.0.4 (needs librealsense
@@ -26,6 +28,7 @@ DOMAIN=42
 JETSON_IP=192.168.123.164
 PIDFILE=$WS/run.pid
 LOG=$WS/run.log
+CRON_TAG="# g1_realsense_autostart"
 DEFAULTS="initial_reset:=true enable_color:=true rgb_camera.profile:=640x360x15 enable_depth:=true depth_module.profile:=424x240x15 enable_gyro:=false enable_accel:=false"
 
 env_setup() {
@@ -89,6 +92,27 @@ XML
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "DIED, see $LOG"; fi
     grep -E "Node Is Up|Device Name|USB type|Open profile|ERROR|died" "$LOG" | grep -v hwmon | cut -c1-200 | head -8
     ;;
+boot)
+    export PATH="$PATH:/usr/sbin:/sbin"
+    echo "$(date '+%F %T') boot: waiting for $JETSON_IP"
+    for _ in $(seq 1 60); do ip -4 addr show 2>/dev/null | grep -q "inet $JETSON_IP/" && break; sleep 2; done
+    sleep 20   # let master_service and the USB hub settle
+    bash "$0" start
+    if ! running; then echo "$(date '+%F %T') boot: first start failed, retrying"; sleep 20; bash "$0" start; fi
+    ;;
+autostart-on)
+    [ "$(basename "$0")" = realsense_ros2_remote.sh ] && [ -f "$0" ] || { echo "run it as a file (tools/realsense_ros2.sh autostart on copies it)"; exit 1; }
+    LINE="@reboot /bin/bash $0 boot >> $WS/boot.log 2>&1 $CRON_TAG"
+    ( crontab -l 2>/dev/null | grep -vF "$CRON_TAG"; echo "$LINE" ) | crontab -
+    echo "autostart on: $LINE"
+    ;;
+autostart-off)
+    ( crontab -l 2>/dev/null | grep -vF "$CRON_TAG" ) | crontab - 2>/dev/null || crontab -r 2>/dev/null
+    echo "autostart off"
+    ;;
+autostart-status)
+    crontab -l 2>/dev/null | grep -F "$CRON_TAG" || echo "autostart off"
+    ;;
 stop)
     if running; then
         kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
@@ -108,6 +132,6 @@ log)
     tail -40 "$LOG" 2>/dev/null
     ;;
 *)
-    echo "usage: $0 build|start [launch args]|stop|status|log"; exit 2
+    echo "usage: $0 build|start [launch args]|stop|status|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
     ;;
 esac

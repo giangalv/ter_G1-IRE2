@@ -52,7 +52,25 @@ on the shared USB 5 V when the D435i starts streaming (not traced). So any node 
 reads them must reopen the device when it vanishes, especially right after the head
 video starts or restarts.
 
+## As ROS 2 images on the laptop (2026-11-05)
+
+`tools/hand_cameras_ros2.sh install|start|stop|status|log` runs the workspace's `g1_hand_camera/hand_camera_node`
+(Python package copied to `~/g1_hand_cameras/py` on the Jetson, no colcon, no root) with the Jetson's ROS 2 Foxy,
+Python 3.8, OpenCV 4.2. Same reasoning as the RealSense driver (docs/06): in the robot's DDS domain 0 Foxy's DDS
+crashes, so the node uses **domain 42** with Fast DDS on 192.168.123.164 and the laptop's
+`g1_unitree_bridge/hand_camera_relay` (ter_G1U6 repo) copies the streams to domain 0.
+
+* Only the **JPEG** stream is published (`/g1/hand/{left,right}/camera/image_raw/compressed`, 10 Hz requested,
+  quality 80): a raw 640x480 rgb8 frame is 920 kB and does not fit the laptop's 416 kB UDP receive buffer.
+* Measured at the laptop in domain 42: right 8.3 Hz, left 8.9 Hz (the cameras do ~14 fps). Both cameras opened at once
+  without trouble; the node logs `left/right palm camera available`.
+* `available` (latched `Bool`) is relayed too. Both USB devices are in `power/control=auto` and show `suspended`
+  when idle; they wake up when opened.
+* Seen live in the 2D view (ter_G1U6 `hand_2d`): both cameras look at the palm side with the finger bases at the
+  top of the picture, i.e. the same way up as the flat-hand diagram.
+* Stop it with `hand_cameras_ros2.sh stop`. It is **not** started at boot.
+
 ## Not done yet
 
 * No intrinsic calibration; no camera-to-palm extrinsics.
-* No ROS publisher in this repo (the application workspace has one).
+* No ROS publisher in this repo (the application workspace has one; `hand_cameras_ros2.sh` runs it on the Jetson).

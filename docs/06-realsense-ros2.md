@@ -64,6 +64,16 @@ If it freezes again: `realsense_ros2.sh stop && realsense_ros2.sh start`, and lo
 The relay at the laptop depends on the laptop's load: with another heavy job running (load average 31, swap full)
 it dropped to ~2.5 Hz while the raw topics were still at ~10 Hz.
 
+## Autostart at boot (written, not installed)
+
+`tools/realsense_ros2.sh autostart on|off|status` adds / removes one `@reboot` line in the **user** crontab of
+`unitree` on the Jetson (it copies `realsense_ros2_remote.sh` to `~/g1_realsense`, waits for 192.168.123.164,
+sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root). On 2026-11-05 the user asked for it,
+but the automatic permission check refused the call, so it was **not** installed and was not tried another way.
+It is untested at a real boot. Run `tools/realsense_ros2.sh autostart on` yourself if you want it; every boot then
+loses the phone-app head video. The LiDAR service has no equivalent on the Jetson: it is switched from the laptop
+(`tools/g1_up.sh`).
+
 ## Not working / not done
 
 * **IMU: no.** The motion module reports `Hardware Notification: Motion Module failure, Hardware Error`
