@@ -133,7 +133,7 @@ gateway is needed for the robot LAN.
   cause 1 still applies. Nothing under `/unitree` was changed and no persistent
   change was made. A reboot, or `mscli startservice video_hub_pc4`, restarts the
   hub with the stock config, which fails as in cause 1.
-* **Fix for causes 1 and 2, installed 2026-11-05 (reboot test pending):**
+* **Fix for causes 1 and 2, installed 2026-11-05 (reboot test failed, see below):**
   `/etc/udev/rules.d/71-g1-robot-lan.rules` (a new file, nothing else was edited):
   ```
   SUBSYSTEM=="net", DRIVERS=="cdc_ether", NAME="ethusb0"
@@ -144,8 +144,18 @@ gateway is needed for the robot LAN.
   USB LAN adapter gets `ethusb0`. A `udevadm test` dry run assigned exactly these
   names; the running interfaces were not renamed (they are up), so it takes effect
   at the next boot. The NetworkManager profile `unitree1` is bound to neither a name
-  nor a MAC, so it follows the NIC. If the rename ever fails the NIC keeps a kernel
-  name and the robot LAN still comes up, exactly as before the rule.
+  nor a MAC, so it was expected to follow the NIC.
+  **Reboot test, 2026-11-05 ~19:00 Jetson time: FAILED.** After `systemctl reboot` the
+  Jetson did not answer on `192.168.123.164` (ARP incomplete, no IPv6 link-local
+  either, its MAC never seen on the cable) for more than 11 minutes, while PC1, the
+  LiDAR and both hands answered and the Jetson's own Wi-Fi hotspot
+  (`G1-NX-AP-...`) was visible. So it is up but its wired NIC has no usable address.
+  Cause not yet known; the rule is the first suspect (a profile such as
+  `Wired connection N` may now match `eth0` instead of `unitree1`, or the NIC did
+  not come up). The earlier claim that a failed rename would leave things as before
+  was wrong. Recovery needs a way into the Jetson that is not the cable: its hotspot
+  (`10.42.0.1`) or a monitor and keyboard; then `sudo nmcli connection up unitree1
+  ifname eth0` to test the profile, or delete the rule and reboot.
   Revert: delete the file and reboot. The stock `cyclonedds.xml` and the binary
   are unchanged and need no edit once `eth0` is the robot LAN.
   Cause 3 was a faulty connector, fixed by moving the cable (see above).
