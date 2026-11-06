@@ -1,7 +1,15 @@
 """Move the thumb-rotation actuator of ONE Inspire RH56E2 hand in steps and back, to check that it works and which way it goes.
 Without --go it only reads and prints the plan.
 
-usage: python3 thumb_test.py HOST [destra|sinistra] [--go]      (HOST 192.168.123.211 = right, .210 = left)
+usage: python3 thumb_test.py HOST [destra|sinistra] [--go] [--steps=850,700] [--poll=0.4] [--stall=2.5] [--bend=N] [--channel=rot|bend]
+       (HOST 192.168.123.211 = right, .210 = left)
+--channel which thumb channel the steps move: rot (rotation, default) or bend
+--steps  the set values that channel goes through, then back to the start value (default 850,700)
+--poll   seconds between two readings (default 0.4); --stall  seconds without movement before a step counts as stalled (2.5)
+--bend   first move the thumb bend to N (1000 = thumb stretched, far from the palm) and put it back at the end
+Near an end stop use e.g. --steps=700,500,300,150,0 --poll=0.1 --stall=0.5 --bend=1000: a stall or a rise of the rotation
+force of more than 250 over its idle value counts as contact, the set value is moved 40 counts back off the stop and the test
+goes straight to the way back.
 
 Writes only SPEED_SET (300, back to 1000 at the end) and ANGLE_SET. The other five channels are written back at their current
 set value, so only the thumb rotation moves. Steps: start -> 850 -> 700 -> start. After every ANGLE_SET it reads the six angles
@@ -12,14 +20,23 @@ current position when ERROR is not zero or |FORCE_ACT| goes over 700 on any chan
 import socket, struct, subprocess, sys, time
 
 GO = "--go" in sys.argv
-args = [a for a in sys.argv[1:] if a != "--go"]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+
+def opt(name, default):
+    for a in sys.argv[1:]:
+        if a.startswith(name + "="): return a.split("=", 1)[1]
+    return default
 HOST = args[0]
 SIDE = args[1] if len(args) > 1 else "destra"   # only used in the spoken warning
 SPEED_SLOW, SPEED_FACTORY = 300, 1000
 FORCE_ABORT = 700          # |FORCE_ACT| above this -> hold position and stop (idle ~130)
-STEPS = [850, 700]
+STEPS = [int(x) for x in opt("--steps", "850,700").split(",")]
+POLL, STALL = float(opt("--poll", "0.4")), float(opt("--stall", "2.5"))
+BEND = int(opt("--bend", "-1"))     # -1 = leave the thumb bend alone
+CONTACT = 250                      # rise of |FORCE_ACT| of the rotation over its idle value that counts as contact
+BACKOFF = 40
 A_SET, F_SET, S_SET, A_ACT, F_ACT, CUR, ERR, STA, TMP = 1486, 1498, 1522, 1546, 1582, 1594, 1606, 1612, 1618
-ROT = 5
+ROT, BENDCH = 5, 4
 
 sock = socket.create_connection((HOST, 6000), timeout=2.0); sock.settimeout(1.5)
 tid = 0
@@ -65,9 +82,15 @@ if any(st["ERROR"]): sys.exit("ERROR register not zero - not writing anything")
 if max(abs(v) for v in st["FORCE_ACT"]) > FORCE_ABORT: sys.exit("fingers already loaded - not writing anything")
 
 base = [hold(i) for i in range(6)]
-start = base[ROT]
-print(f"plan: SPEED_SET -> {SPEED_SLOW}; thumb rotation {start} -> {STEPS} -> {start}, the other channels stay at {base[:ROT]}; "
-      f"abort at |FORCE_ACT| > {FORCE_ABORT}; SPEED_SET back to {SPEED_FACTORY}", flush=True)
+orig = list(base)
+CH = BENDCH if opt("--channel", "rot") == "bend" else ROT
+NAME = {ROT: "thumb rotation", BENDCH: "thumb bend"}
+idle_force = list(st["FORCE_ACT"])
+prelude = BEND >= 0 and CH == ROT
+print(f"plan: SPEED_SET -> {SPEED_SLOW}; " + (f"thumb bend {orig[BENDCH]} -> {BEND} first; " if prelude else "")
+      + f"{NAME[CH]} {orig[CH]} -> {STEPS} -> {orig[CH]}; " + (f"thumb bend back to {orig[BENDCH]}; " if prelude else "")
+      + f"read every {POLL} s, stalled after {STALL} s, contact = force of the moving channel {CONTACT} over its idle value "
+      f"(then {BACKOFF} counts back off); abort at |FORCE_ACT| > {FORCE_ABORT} or ERROR; SPEED_SET back to {SPEED_FACTORY}", flush=True)
 if not GO:
     print("dry run: nothing written (add --go to run the test)", flush=True); sock.close(); sys.exit(0)
 
@@ -78,40 +101,60 @@ wr(S_SET, [SPEED_SLOW] * 6)
 assert rd(S_SET, 6) == [SPEED_SLOW] * 6, "SPEED_SET readback differs"
 print("SPEED_SET -> 300 confirmed", flush=True)
 
-def move_to(target):
-    """write the new rotation set value, watch until reached / stalled / timeout / abort; returns (verdict, last angle of the rotation)"""
-    cmd = list(base); cmd[ROT] = target
-    wr(A_SET, cmd)
+def back_off(ch, ang, dirn, why):
+    """stop pushing against whatever blocks the channel: set value BACKOFF counts behind the measured angle"""
+    b = min(1000, max(0, ang[ch] - dirn * BACKOFF))
+    cmd = list(base); cmd[ch] = b
+    wr(A_SET, cmd); base[ch] = b
+    print(f"{why}: set value moved back to {b} (measured {ang[ch]})", flush=True)
+
+def move_to(ch, target):
+    """write the new set value of one channel and watch until reached / contact / stalled / timeout / abort; returns (verdict, measured)"""
+    ang0 = [s16(v) for v in rd(A_ACT, 6)]
+    dirn = 1 if target >= ang0[ch] else -1
+    cmd = list(base); cmd[ch] = target
+    wr(A_SET, cmd); base[ch] = target
     print(f"ANGLE_SET written {cmd} readback {[s16(v) for v in rd(A_SET, 6)]}", flush=True)
     t0 = time.time(); last_move = t0; prev = None
-    while time.time() - t0 < 6:
-        time.sleep(0.4)
+    while time.time() - t0 < 8:
+        time.sleep(POLL)
         ang = [s16(v) for v in rd(A_ACT, 6)]; frc = [s16(v) for v in rd(F_ACT, 6)]; err = rd(ERR, 3)
         print(f"{time.time()-t0:4.1f}s ANGLE_ACT {ang} FORCE_ACT {frc} ERROR {err}", flush=True)
         if any(err) or max(abs(v) for v in frc) > FORCE_ABORT:
             wr(A_SET, [max(0, a) for a in ang])
             print("ABORT: error/force limit -> holding current position", flush=True)
-            return "aborted", ang[ROT]
-        if prev is None or abs(ang[ROT] - prev) > 2: last_move = time.time()
-        prev = ang[ROT]
-        if abs(ang[ROT] - target) <= 30: return "reached", ang[ROT]
-        if time.time() - last_move > 2.5: return "stalled", ang[ROT]
+            return "aborted", ang[ch]
+        if abs(frc[ch] - idle_force[ch]) > CONTACT:
+            back_off(ch, ang, dirn, "CONTACT")
+            return "contact", ang[ch]
+        if prev is None or abs(ang[ch] - prev) > 2: last_move = time.time()
+        prev = ang[ch]
+        if abs(ang[ch] - target) <= 30: return "reached", ang[ch]
+        if time.time() - last_move > STALL:
+            back_off(ch, ang, dirn, "STALLED")
+            return "stalled", ang[ch]
     return "timeout", prev
 
 results = []
 verdict = "reached"
-for target in STEPS:
-    print(f"--- step: rotation -> {target}", flush=True)
-    verdict, a = move_to(target)
-    results.append((target, verdict, a))
-    if verdict != "reached": break
+if prelude:
+    print(f"--- thumb bend -> {BEND}", flush=True)
+    verdict, a = move_to(BENDCH, BEND); results.append(("thumb bend", BEND, verdict, a))
+if verdict == "reached":
+    for target in STEPS:
+        print(f"--- step: {NAME[CH]} -> {target}", flush=True)
+        verdict, a = move_to(CH, target); results.append((NAME[CH], target, verdict, a))
+        if verdict != "reached": break
 if verdict != "aborted":
-    print(f"--- back to the start value {start}", flush=True)
-    v, a = move_to(start)
-    results.append((start, v, a))
+    print(f"--- back: {NAME[CH]} -> {orig[CH]}", flush=True)
+    verdict, a = move_to(CH, orig[CH]); results.append((NAME[CH], orig[CH], verdict, a))
+    if prelude and verdict != "aborted":
+        print(f"--- back: thumb bend -> {orig[BENDCH]}", flush=True)
+        verdict, a = move_to(BENDCH, orig[BENDCH]); results.append(("thumb bend", orig[BENDCH], verdict, a))
 
 wr(S_SET, [SPEED_FACTORY] * 6)
 snapshot("after")
-print("RESULTS (target, verdict, measured):", results, flush=True)
+print("RESULTS (channel, target, verdict, measured):", flush=True)
+for r in results: print("  ", r, flush=True)
 sock.close()
 say(f"Test del pollice della mano {SIDE} finito.")

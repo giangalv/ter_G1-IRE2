@@ -164,8 +164,18 @@ every second and draws a heat map of the most active one.
   is, so the first close did not rotate it. The rotation test (`SPEED_SET` 300, set value 956 -> 850 -> 700 -> 956, the other five
   channels held) was reached at every step: measured 828, 683, back to 942, `ERROR` = 0, `FORCE_ACT` unchanged (thumb rotation
   about -90 the whole time, no obstacle); every step finished within the first 0.4 s sample, so the rotation is fast even at
-  `SPEED_SET` 300. Lower values move the rotation away from the rest value ~956 (which way that is in space: see the user's note
-  below, if any). `open_hand.py HOST destra --keep-thumb` opens only the four fingers.
+  `SPEED_SET` 300. `open_hand.py HOST destra --keep-thumb` opens only the four fingers.
+* **Full stroke of the thumb, right hand, same day** (`thumb_test.py --go --bend=1000 --steps=700,500,300,150,0 --poll=0.1 --stall=0.5`,
+  then `--channel=bend --steps=100,0`): the rotation went through 700, 500, 300, 150 and **0** (measured 729, 517, 326, 137, 9) and
+  came back to 941 (set 956) in 1.8 s; the bend went from 198 to 1000 (measured 997) and, with the rotation at rest, down to **0**
+  (measured 2) and back to 198. No contact, no stall, `ERROR` = 0, `FORCE_ACT` of the moving channel stayed within about
+  +-40 of its idle value (it shifts by up to ~120 while the actuator moves, with the sign of the direction), nothing came near the
+  abort limit 700. So both thumb channels use the **whole 0 ... 1000 range** and 700 was not an end stop. The rotation covers about
+  1000 counts in 1.8 s and the bend about 800 in 1.6 s at `SPEED_SET` 300. The right hand was left with the four fingers open
+  (~998), thumb bend 198 and rotation 941 (set 956); the left hand is still a closed fist and was not tested.
+* `thumb_test.py` stops a step on contact (force of the moving channel more than 250 over its idle value) or when it has not moved
+  for `--stall` seconds, backs the set value off 40 counts and goes straight to the way back; it did not trigger in these runs, so
+  that path is untested on the hardware.
 * **The actuators rest ~15 counts below their set value** (set 969 -> measured 953-956; set 956 -> 941; set 850 -> 828; 700 -> 683).
   Writing the measured value back as the new set value therefore makes a held channel creep by ~15 per run; the tools now write
   back the last set value instead (`hold()`), unless it is far from the measured one (the register reads garbage after a
