@@ -4,6 +4,7 @@
 #   tools/realsense_ros2.sh install      once: clone realsense-ros 4.0.4 here, copy it to the Jetson, build it there
 #   tools/realsense_ros2.sh start [launch args]   e.g. start enable_color:=true (stop the app video first)
 #   tools/realsense_ros2.sh stop | status | log
+#   tools/realsense_ros2.sh stream [name=value ...]   show / change the compression (rates, JPEG quality, PNG level) of the running driver
 #   tools/realsense_ros2.sh autostart on|off|status   start the driver by itself at every Jetson boot (user crontab @reboot)
 #
 # Needs: ssh access to unitree@192.168.123.164 (override with G1_JETSON_SSH="ssh other@host"), git, tar.
@@ -15,9 +16,9 @@ TAG=4.0.4
 COMMIT=8abb4657c0add15f87b0edbfb67eaba2c1c2c439   # realsense-ros 4.0.4: wants librealsense 2.50.0
 
 remote() { $JETSON_SSH bash -s -- "$@" < "$HERE/realsense_ros2_remote.sh"; }
-# the remote script (also what cron runs) and the colour-JPEG node live in ~/g1_realsense on the Jetson
+# the remote script (also what cron runs) and the stream-encoder node (colour JPEG, depth PNG) live in ~/g1_realsense on the Jetson
 push_files() {
-    tar czf - -C "$HERE" realsense_ros2_remote.sh realsense_jpeg_node.py \
+    tar czf - -C "$HERE" realsense_ros2_remote.sh realsense_encoder_node.py \
         | $JETSON_SSH 'mkdir -p ~/g1_realsense && tar xzf - -C ~/g1_realsense && chmod +x ~/g1_realsense/realsense_ros2_remote.sh'
 }
 
@@ -32,7 +33,7 @@ install)
     echo "sources copied, building on the Jetson (about 1.5 min)..."
     remote build
     ;;
-start | stop | status | check | log)
+start | stop | status | check | log | stream)
     [ "$1" = start ] && push_files
     remote "$@"
     ;;
@@ -49,6 +50,6 @@ autostart)
     esac
     ;;
 *)
-    echo "usage: $0 install|start [launch args]|stop|status|check|log|autostart on|off|status"; exit 2
+    echo "usage: $0 install|start [launch args]|stop|status|check|log|stream [name=value ...]|autostart on|off|status"; exit 2
     ;;
 esac

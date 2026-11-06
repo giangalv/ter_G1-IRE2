@@ -127,7 +127,7 @@ depth ~24, cloud ~8 after decimation), so a profile picks what is on, as the tas
 `G1_WIFI_PROFILE=nav|manip|full tools... viz_real.sh wifi` starts the matching nodes and RViz config
 (`g1_real_nav.rviz`, `g1_real_manip.rviz`, `g1_real.rviz`). Two things make this cheap to switch:
 
-* **Head colour as JPEG from the Jetson** (`tools/realsense_jpeg_node.py`, node `realsense_color_jpeg`, 10 Hz, quality 80,
+* **Head colour as JPEG and depth as PNG from the Jetson** (`tools/realsense_encoder_node.py`, node `realsense_encoder`; colour 10 Hz, quality 80,
   ~21 kB per frame = 1.2-1.7 Mbit/s instead of 66). The relay on the laptop decodes it. It encodes only while someone
   subscribes. Started with the driver (`realsense_ros2.sh start`, also by the supervisor and by `autostart`).
 * **Lazy relays** (`lazy:=true` in `realsense_relay` and `hand_camera_relay`): a stream is pulled from the Jetson only
@@ -164,11 +164,51 @@ order of magnitude. (2) In `manip` run 2 the RealSense had stalled (its supervis
 ~1.5 min later; cause not found) and with no head camera the tactile came back to 16 / 11 Hz: **the head camera is what
 costs the hands their rate.** What crosses the link for it is the raw depth image from the Jetson (424x240 Z16 = 203 kB per
 frame, ~24 Mbit/s at 15 Hz); the cloud is built on the laptop afterwards and costs no link (an earlier version of this
-text said the cloud's size was the cost: wrong). The obvious next step: make the Jetson send depth at ~5 Hz (or
-compressed) when over the Wi-Fi. Not done. (3) In `nav` the colour is slower than in `manip` because the LiDAR shares the
+text said the cloud's size was the cost: wrong). That step is done now, see "Compression" below. (3) In `nav` the colour is slower than in `manip` because the LiDAR shares the
 link.
 `lazy` verified in all runs: with nobody listening 0 pulls started; the probe started both RealSense groups
 and they were released 5 s after it ended. On the cable: colour 4.7 Hz, depth 7.4 Hz through the same path.
+
+### Compression of the head camera: what it is and how to choose
+
+Two streams of the D435i are compressed **on the Jetson** by `tools/realsense_encoder_node.py` (started with the driver) and
+only while the laptop's relay subscribes (the relay itself subscribes only while an RViz display / node uses the output):
+
+| Stream | Raw from the driver | Compressed (default) | How |
+|---|---|---|---|
+| colour 640x360 | 66 Mbit/s (15 Hz) | **JPEG q80, 10 Hz: ~21 kB/frame = 1.7 Mbit/s**, lossy | `/camera/color/image_raw/compressed` |
+| depth 424x240 Z16 | 204 kB/frame, 22.7 Mbit/s (14 Hz) | **PNG 16 bit level 1, 5 Hz: 46 kB/frame = 1.8 Mbit/s**, lossless | `/camera/depth/image_rect_raw/compressedDepth` |
+| depth, level 6, 8 Hz | | 37.7 kB/frame = 2.4 Mbit/s | |
+
+The PNG is decoded on the laptop to exactly the raw frame (78 of 78 frames identical when compared stamp by stamp); the
+relay then makes the same `/g1/camera/depth/image` (32FC1, m) and `/g1/camera/depth/points` as with raw, so RViz configs
+do not change. The format is the image_transport `compressedDepth` layout, but it was only decoded by our own code:
+Humble's own `image_transport republish` fails with that plugin whatever the content ("subscribeImpl with five arguments
+has not been overridden").
+
+**Where each choice is made**
+
+* **On the laptop, what to take** (`viz_real.sh`, or the launch args `rs_color_compressed` / `rs_depth_compressed`):
+  `G1_RS_COLOR=jpeg|raw` and `G1_RS_DEPTH=png|raw`. Default: jpeg + png on `wifi`, raw on `cable`. Use `raw` on the cable
+  (nothing to save, full 15 Hz and no loss in the colour).
+* **On the Jetson, how much** (live, no restart, any time): `tools/realsense_ros2.sh stream` shows the values and
+  `tools/realsense_ros2.sh stream depth_rate_hz=10 depth_png_level=6 color_rate_hz=5 color_quality=60` changes them
+  (`ros2 param set /realsense_encoder ...` there does the same). They go back to the defaults (colour 10 Hz q80, depth
+  5 Hz level 1) whenever the driver is restarted by `start`, by the supervisor or by a reboot; to change the defaults edit
+  `realsense_encoder_node.py` and run `tools/realsense_ros2.sh start`.
+* **Rules of thumb**: the traffic is `kB per frame x rate`. Depth rate is the strongest lever for the hands' tactile rate (the
+  head camera costs the hands, see above): 5 Hz = 1.8 Mbit/s, 10 Hz = 3.7, 15 Hz = 5.5 (all lossless; the raw stream was 22.7).
+  A higher PNG level saves ~18 % more at the price of Jetson CPU (not measured). JPEG quality 60 instead of 80 roughly
+  halves the colour (not measured). The cloud rate (`points_rate_hz`, 5) and the image rate (`image_rate_hz`, 10) of the
+  relay only limit what is published on the laptop; they cannot go above what the Jetson sends.
+* The cloud stays at about 2.7-3 Hz on this laptop (it is built from every 2nd pixel and published as a 240 kB message,
+  also on the cable run); not a Wi-Fi limit.
+
+**Measured with PNG depth + JPEG colour** (2026-11-06 14:22, two cards, AP ping 0 % loss, 2.6 ms; run 3):
+`nav`: colour 6.9 Hz, depth cloud 2.7 Hz, LiDAR 9.7 Hz, lowstate 19.7 Hz, no hand errors. `manip`: colour 4.7 Hz, cloud 3.1 Hz,
+**tactile 6.1 / 14.8 Hz** (3.9 / 3.6 with raw depth in run 1), palm cameras 5.7 / 5.9 Hz, **4 hand bridge errors** in ~60 s
+(12-17 before). `full`: the RealSense was dead for that phase (colour and depth 0 messages; see 06, its supervisor restarted
+it at 21:25 Jetson time), LiDAR 9.9 Hz, tactile 2.9 / 2.7 Hz, 10 errors.
 
 ### Two Wi-Fi cards in the laptop (2026-11-06): the lab keeps its internet
 

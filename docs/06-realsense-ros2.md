@@ -92,10 +92,13 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   port, `usb3_lpm_permit=0` on the port) worked and the camera streamed, but the driver's reset re-enumerates the device and
   `power/control` goes back to `auto`, so a lasting version would need a udev rule. Not installed: no evidence yet that
   USB power management is the cause.
-* **JPEG colour node** (`tools/realsense_jpeg_node.py`, Foxy, `realsense_color_jpeg`): `/camera/color/image_raw` ->
-  `/camera/color/image_raw/compressed` at 10 Hz, quality 80, ~21 kB per frame (57 frames in 8 s measured), encodes only while
-  somebody subscribes. `realsense_ros2.sh start|autostart on` copy it with the remote script (`push_files`);
-  `start` / the supervisor start it, `stop` stops it. It is what makes the head colour affordable over the Wi-Fi (07).
+* **Stream encoder** (`tools/realsense_encoder_node.py`, Foxy, node `realsense_encoder`): `/camera/color/image_raw` ->
+  `/camera/color/image_raw/compressed` (JPEG, 10 Hz, q80, ~21 kB) and `/camera/depth/image_rect_raw` ->
+  `/camera/depth/image_rect_raw/compressedDepth` (lossless PNG, 5 Hz, ~46 kB). Each only encodes while somebody subscribes.
+  `realsense_ros2.sh start|autostart on` copy it with the remote script (`push_files`); `start` / the supervisor start it,
+  `stop` stops it. `realsense_ros2.sh stream [name=value ...]` shows / changes its rates, JPEG quality and PNG level live.
+  It is what makes the head camera affordable over the Wi-Fi (07, "Compression"). It is a single script next to the
+  remote script, not a colcon package: nothing to build on the Jetson.
 * `running()` also checks `/proc/<pid>/cmdline`: the pid file survives a reboot and its pid can belong to an
   unrelated process then, which would make `start` say "already running" and never start the driver.
 * Every boot loses the phone-app head video (`videohub_pc4` is stopped, see above).
