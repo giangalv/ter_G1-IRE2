@@ -80,11 +80,18 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   tested case is a clean start under `env -i` (cron's environment): attempt 1, 121 frames in 8 s. Read
   `~/g1_realsense/boot.log` after the next robot boot.
 * **Supervisor** (`realsense_ros2_remote.sh supervise`, started by `boot` after the checks, also by hand): every 30 s it runs
-  `check` and restarts the driver after 2 failed checks in a row (a USB reset like the one of 2026-11-06 at 18:22 Jetson time, "Disable of
-  device-initiated U1/U2 failed", leaves the node alive and 0 frames). Tested by SIGSTOP of the driver: restarted by itself in
-  ~2 min. `stop` touches `~/g1_realsense/user_stop` so the supervisor does not bring back a driver you stopped on purpose;
-  `start` removes it; `autostart off` kills the supervisor. Root cause of the reset not verified (suspects: USB3 U1/U2
-  power management, D435i `power/control=auto`); a fix would be a root change on the Jetson.
+  `check` and restarts the driver after 2 failed checks in a row (the "running but dead" state of 2026-11-06: node alive, 0
+  frames). Tested by SIGSTOP of the driver: restarted by itself in ~2 min. It also acted by itself at 18:49, and at 21:04:56
+  Jetson time during a Wi-Fi test (frames stopped, back ~1.5 min later); causes not found. `stop` touches
+  `~/g1_realsense/user_stop` so the supervisor does not bring back a driver you stopped on purpose; `start` removes it;
+  `autostart off` kills the supervisor. Look for `supervise:` lines in `~/g1_realsense/boot.log`.
+* **The kernel messages `Disable of device-initiated U1/U2 failed` + `reset SuperSpeed Gen 1 USB device` are not a sign of
+  failure**: they appear at every deliberate hardware reset of the camera (`initial_reset:=true`), also in the clean boot of
+  2026-11-06 20:39 (streaming at the first attempt, 115 frames in 8 s). An earlier version of this page took them for the
+  cause of the dead state. A runtime test on 2026-11-06 (root on the Jetson: `power/control=on` for the camera, its hub and
+  port, `usb3_lpm_permit=0` on the port) worked and the camera streamed, but the driver's reset re-enumerates the device and
+  `power/control` goes back to `auto`, so a lasting version would need a udev rule. Not installed: no evidence yet that
+  USB power management is the cause.
 * **JPEG colour node** (`tools/realsense_jpeg_node.py`, Foxy, `realsense_color_jpeg`): `/camera/color/image_raw` ->
   `/camera/color/image_raw/compressed` at 10 Hz, quality 80, ~21 kB per frame (57 frames in 8 s measured), encodes only while
   somebody subscribes. `realsense_ros2.sh start|autostart on` copy it with the remote script (`push_files`);

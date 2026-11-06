@@ -15,13 +15,16 @@
 #    random name at every boot; the password is the same each time), the extra address <ADDR> (default 192.168.123.98) on
 #    the robot LAN's subnet and a fixed 10.42.0.250 on the AP's own subnet (no DHCP); the cable is disconnected so
 #    that the Wi-Fi path is the only one.
-#  * THIS LAPTOP HAS ONE WI-FI CARD: while connected to the robot it has no lab Wi-Fi and no internet.
+#  * With ONE Wi-Fi card the laptop has no lab Wi-Fi and no internet while it is on the robot. With a SECOND Wi-Fi device
+#    (a USB dongle) that carries the lab Wi-Fi, the robot link takes the other device and the internet stays. The
+#    robot link uses the Wi-Fi device that is free (or already on g1-ap); set G1_WLAN to force one. A 2.4 GHz-only dongle
+#    is the one to keep on the lab: the robot's AP can then move to 5 GHz on the laptop's own card.
 #
 # The first `up` after a robot boot needs the cable (or a laptop that already knows the password): it reads the
 # AP's name and password from the Jetson (read-only sudo) and stores them only in the NetworkManager profile.
 #
-# Environment: G1_PW (Jetson password, ssh and sudo), G1_NIC (cable NIC, default enp59s0), G1_WLAN (default: the first
-# Wi-Fi device), G1_WIFI_ADDR (default 192.168.123.98), G1_WIFI_STATIC (default 10.42.0.250, empty = DHCP),
+# Environment: G1_PW (Jetson password, ssh and sudo), G1_NIC (cable NIC, default enp59s0), G1_WLAN (default: the Wi-Fi
+# device with no connection, else the first), G1_WIFI_ADDR (default 192.168.123.98), G1_WIFI_STATIC (default 10.42.0.250, empty = DHCP),
 # G1_JETSON_SSH (override the ssh command, default: password ssh as unitree@192.168.123.164 with askpass.sh).
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -30,7 +33,8 @@ AP_IP=10.42.0.1
 ADDR=${G1_WIFI_ADDR:-192.168.123.98}
 STATIC=${G1_WIFI_STATIC-10.42.0.250}
 CABLE=${G1_NIC:-enp59s0}
-WLAN=${G1_WLAN:-$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')}
+WLAN=${G1_WLAN:-$(nmcli -t -f DEVICE,TYPE,CONNECTION device | awk -F: '$2=="wifi" && ($3=="" || $3=="g1-ap"){print $1; exit}')}
+[ -n "$WLAN" ] || WLAN=$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')
 PROFILE=g1-ap
 STATE=${XDG_CACHE_HOME:-$HOME/.cache}/g1_wifi.state
 CYCLONE=${XDG_CACHE_HOME:-$HOME/.cache}/g1_wifi_cyclonedds.xml
@@ -142,7 +146,11 @@ cmd_up() {
     nmcli connection modify "$PROFILE" 802-11-wireless.ssid "$scan" ipv4.method $method ipv4.addresses "$addrs" \
         ipv4.routes "192.168.123.0/24 $AP_IP" ipv4.never-default yes connection.autoconnect no || die "cannot configure the profile"
 
-    say "leaving the cable ($CABLE) and joining the AP: from now on no lab Wi-Fi, no internet"
+    if [ -n "$(awk -F= '$1=="LAB_CONN"{print $2}' "$STATE" 2>/dev/null)" ]; then
+        say "leaving the cable ($CABLE) and joining the AP with $WLAN: from now on no lab Wi-Fi, no internet"
+    else
+        say "leaving the cable ($CABLE) and joining the AP with $WLAN (the lab Wi-Fi is on another device and stays)"
+    fi
     nmcli device disconnect "$CABLE" > /dev/null 2>&1
     if ! nmcli -w 45 connection up "$PROFILE" > /dev/null; then
         say "could not join the AP, going back"; cmd_down; exit 1
@@ -171,8 +179,13 @@ cmd_down() {
     nmcli connection down "$PROFILE" > /dev/null 2>&1
     say "cable back"
     nmcli device connect "$CABLE" > /dev/null 2>&1
-    say "lab Wi-Fi back"
-    if [ -n "${LAB_CONN:-}" ]; then nmcli -w 40 connection up "$LAB_CONN" > /dev/null 2>&1; else nmcli device connect "$WLAN" > /dev/null 2>&1; fi
+    if [ -n "${LAB_CONN:-}" ]; then
+        say "lab Wi-Fi back ($LAB_CONN)"; nmcli -w 40 connection up "$LAB_CONN" > /dev/null 2>&1
+    elif nmcli -t -f DEVICE,TYPE,STATE device | grep -v "^$WLAN:" | grep -q ':wifi:connected'; then
+        say "the lab Wi-Fi is on another device: nothing to bring back"
+    else
+        say "lab Wi-Fi back"; nmcli device connect "$WLAN" > /dev/null 2>&1
+    fi
     # a TCP connect, not ping: many networks (the lab's included) drop ICMP to the outside
     for _ in $(seq 1 20); do timeout 3 bash -c 'exec 3<>/dev/tcp/1.1.1.1/443' > /dev/null 2>&1 && { say "internet is back"; return 0; }; sleep 2; done
     say "no internet yet (lab Wi-Fi up? check by hand)"

@@ -145,16 +145,56 @@ Measured with the nodes only (no RViz window), laptop 2-3 m from the robot, 15 s
 
 Earlier runs, before the JPEG colour (colour was the raw 66 Mbit/s): everything on gave tactile 0.4 / 0.1 Hz and
 Modbus timeouts; LiDAR + hands without RealSense gave tactile 4.5 Hz; hands + cameras with neither LiDAR nor RealSense
-gave tactile 16.5 Hz. So the head camera's depth cloud (~240 kB per message) is what still takes `manip`'s tactile from
-16 to 7 Hz; a coarser cloud would give it back (not done). In `nav` the colour is slower (3.5 Hz) than in `manip`
-(7.3 Hz) because the LiDAR is on the same link; whether the decode on the laptop also limits it was not separated.
-`lazy` verified in all three runs: with nobody listening 0 pulls started; the probe started both RealSense groups
+gave tactile 16.5 Hz.
+
+**Same test twice more, 2026-11-06 afternoon, after a real robot boot, two laptop cards** (run 1 / run 2; the table above is the
+morning run, single card):
+
+| Phase | joint states | LiDAR | head colour / depth cloud | tactile | hand bridge errors |
+|---|---|---|---|---|---|
+| `nav` run 1 | 50 Hz | 7.3 Hz (lowstate 15.7 Hz) | 3.8 / 2.7 Hz | - | - |
+| `nav` run 2 | 50 Hz | 9.9 Hz | 5.5 / 3.9 Hz | - | - |
+| `manip` run 1 | 50 Hz | - | 3.2 / 4.1 Hz | 3.9 / 3.6 Hz | 17 in ~60 s |
+| `manip` run 2 | 50 Hz | - | **0 / 0** (RealSense stalled) | **16.3 / 11.4 Hz** | 12 in ~60 s |
+| `full` run 1 / 2 | 50 Hz | 9.9 Hz | 4.0 / 3.5 and 3.7 / 3.5 Hz | 0.3-0.7 Hz | 16 |
+
+Read them like this. (1) The numbers move from run to run by a factor of 2 (the 2.4 GHz channel is shared with the
+building: the AP's ping shows ~3 % loss and max 100-200 ms in every run), so do not read more into one run than the
+order of magnitude. (2) In `manip` run 2 the RealSense had stalled (its supervisor restarted it at 21:04:56 Jetson time,
+~1.5 min later; cause not found) and with no head camera the tactile came back to 16 / 11 Hz: **the head camera is what
+costs the hands their rate.** What crosses the link for it is the raw depth image from the Jetson (424x240 Z16 = 203 kB per
+frame, ~24 Mbit/s at 15 Hz); the cloud is built on the laptop afterwards and costs no link (an earlier version of this
+text said the cloud's size was the cost: wrong). The obvious next step: make the Jetson send depth at ~5 Hz (or
+compressed) when over the Wi-Fi. Not done. (3) In `nav` the colour is slower than in `manip` because the LiDAR shares the
+link.
+`lazy` verified in all runs: with nobody listening 0 pulls started; the probe started both RealSense groups
 and they were released 5 s after it ended. On the cable: colour 4.7 Hz, depth 7.4 Hz through the same path.
+
+### Two Wi-Fi cards in the laptop (2026-11-06): the lab keeps its internet
+
+With a USB dongle plugged in, the lab Wi-Fi profile moves to the dongle (`nmcli connection modify <lab> connection.interface-name
+<dongle>`) and `g1_wifi.sh up` takes the Wi-Fi device that has no connection, so the internet stays while the laptop is on the
+robot. Tested with a D-Link N150 (rt2800usb, 2.4 GHz only) for the lab and the laptop's Intel AX201 for the robot. Does the dongle
+disturb the robot link when both are on 2.4 GHz (lab on channel 11, robot AP on 6, a few cm apart)? Back-to-back, twice each:
+**no**: 30 MB over ssh through the AP 50-51 Mbit/s with the dongle connected and 49-52 without, 0 % ping loss in both, link
+rate 130 Mbit/s, signal 73-75. (Whatever the ssh transfer measures, 50 Mbit/s is not the radio's limit and not what
+the viz streams reach: ssh encryption on the Jetson is a likely cap.) A dongle with 5 GHz would also leave the lab on 5 GHz.
+
+### AP on 5 GHz: tried 2026-11-06, hung the Jetson (do not repeat in place)
+
+With the user's OK, on the cable: `nmcli connection modify Hotspot-42 802-11-wireless.band a 802-11-wireless.channel 36` and
+`nmcli connection up` ("successfully activated"). The next `iw dev wlan0 info` in the same ssh session never returned and from
+then on the Jetson's sshd gave no banner ("timed out during banner exchange", later "Exceeded MaxStartups" from the piled-up
+attempts) while ping, DDS (RealSense, palm cameras) and PC1 kept working and the AP was gone from the air. The user power
+cycled the robot; the AP came back by itself on 2.4 GHz channel 6 with a new name. Suspected, not verified: the Realtek USB
+driver (rtl8852bu) hung on the band switch, taking netlink users down with it. 5 GHz channels allowed to start an AP on
+this adapter: 36 and 149 only (the others are "no IR"). If it is tried again: with someone next to the robot, and by creating
+the hotspot from scratch with `band a channel 36` (the way `start_ap.sh` creates it at boot), not by changing the live one.
 
 Why the profiles are needed even with a second laptop Wi-Fi card (internet + robot at the same time): it keeps the
 internet, the bandwidth of the robot link stays the same. A USB Wi-Fi dongle on the **robot** would not help either:
 its Realtek USB card is already the AP; the limit is the 2.4 GHz channel 6, 20 MHz that Unitree's `start_ap.sh` sets at
-every boot (5 GHz channels 36/149 are allowed; changing it is a persistent root change: not done).
+every boot (changing it is a persistent root change: not done; the attempt above was runtime only).
 The hands' Modbus on its own is fine over the Wi-Fi: 100/100 transactions per hand, with or without NAT, RTT median
 3-12 ms, p99 17-66 ms, 125-register answers 12 ms. The hand bridge's default 20 ms timeout is for the cable: over the
 Wi-Fi `viz_real.sh wifi` sets `hand_tcp_timeout_s` 0.15 (still some errors under load, none with the hands off).
