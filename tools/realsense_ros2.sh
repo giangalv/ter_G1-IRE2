@@ -27,7 +27,7 @@ install)
     echo "sources copied, building on the Jetson (about 1.5 min)..."
     remote build
     ;;
-start | stop | status | log)
+start | stop | status | check | log)
     remote "$@"
     ;;
 autostart)
@@ -43,6 +43,6 @@ autostart)
     esac
     ;;
 *)
-    echo "usage: $0 install|start [launch args]|stop|status|log|autostart on|off|status"; exit 2
+    echo "usage: $0 install|start [launch args]|stop|status|check|log|autostart on|off|status"; exit 2
     ;;
 esac

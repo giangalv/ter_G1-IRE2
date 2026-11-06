@@ -9,9 +9,13 @@
 * "shared" means the Jetson hands out 10.42.0.x by DHCP, forwards (`ip_forward=1`) and **masquerades** towards the
   robot LAN: a client on the AP reaches 192.168.123.x, seen as 192.168.123.164. Its default route is
   192.168.123.1 on `eth1`.
-* The same robot has also been seen with the AP name `G1-NX-AP-017046` (a saved profile on the lab laptop): it is the
-  **same robot, the AP was renamed** (017046 -> 026047). There is no other G1 in the lab. Read the current name from
-  the Jetson (`nmcli -g 802-11-wireless.ssid connection show Hotspot-41`) instead of trusting an old profile.
+* **The SSID changes at every robot boot.** `/usr/local/bin/start_ap.sh`, started by `start_wifi_ap.service`, builds
+  `G1-NX-AP-` plus 6 random digits, runs `nmcli device wifi hotspot ... band bg channel 6` and creates a new profile
+  `Hotspot-N` each time (that is why the laptop has saved profiles with other numbers, e.g. `G1-NX-AP-017046`,
+  `-026047`, `-024737`: all the same robot, there is no other G1). The **password is fixed in that script**, the same at
+  every boot (its value is not recorded in this repo). Consequence: find the AP by scanning for `G1-NX-AP-*`
+  (`tools/g1_wifi.sh` does), never by a remembered name. Anyone in radio range who knows that password gets into the
+  robot network (DDS without authentication, the `bashrunner` service): changing it is a Unitree-side edit, not done.
 * The Jetson cannot be an AP and a client at once (one radio): to put the robot on the lab Wi-Fi the AP has to go
   down. The lab network gives public addresses (130.251.x.x) and the robot's DDS has no authentication (and a
   `bashrunner` service that runs commands), so that is **not** recommended.
@@ -65,15 +69,37 @@ to it is not enough (not understood why: its receive socket for the discovery po
 Once the multicast SPDP has been heard, everything else (data, replies) is unicast and works. A multicast packet
 from the laptop on the AP is never forwarded by the Jetson to `eth1`, so PC1 never hears it.
 
-## Next idea (not tried): carry the multicast SPDP across the Jetson
+## Test 3 (2026-11-06 11:07): the multicast SPDP relay makes DDS domain 0 work over Wi-Fi
 
-Run on the Jetson a small user-space relay (no root needed to join a group and send on `eth1`): receive
-`239.255.0.1:7400+250*domain` on `wlan0` and re-send it on `eth1`, and the other way round. The payload of the SPDP
-packet carries the participant's unicast locators (192.168.123.98), so PC1 would answer straight to .98 over the
-routed path that test 2 showed to work. Needs the same root runtime setup as test 2 (route, proxy ARP, FORWARD
-rules) and the laptop on `AllowMulticast=spdp`. Alternative: option 2 (Cyclone relay on the Jetson).
+`tools/wifi_dds_relay.py` runs on the Jetson as user `unitree` (no root, standard library only). It joins the RTPS
+discovery group 239.255.0.1 port 7400+250*domain on `wlan0` and on `eth1` and copies every packet to the other side
+(`IP_MULTICAST_LOOP=0`, `IP_MULTICAST_ALL=0`, so nothing loops). The payload of an SPDP packet carries the sender's unicast
+locators (192.168.123.98), so PC1 answers straight to .98, and that path is the one test 2 already showed to work (route
+`.98/32 dev wlan0` + proxy ARP + two FORWARD ACCEPT rules on the Jetson). The laptop's Cyclone uses
+`<NetworkInterface address="192.168.123.98"/>` and `<AllowMulticast>spdp</AllowMulticast>` (multicast for discovery only)
+with peers .161 and .164. Self-test on the cable before: test packets out of `wlan0` arrived on the cable, PC1's real
+SPDP packets crossed the other way.
 
-## Ways out (1 tried, see test 2)
+| Check (laptop 2-3 m from the robot, 11:08) | Result |
+|---|---|
+| ping from .98 to .164, .161, .120, .210, .211 | 0 % loss, 2-6 ms |
+| `/lf/lowstate` | 239 msgs, **19.9 Hz** |
+| `/utlidar/imu_livox_mid360` | 2368 msgs, **197 Hz** |
+| topics seen in domain 0 | **124** (was 2) |
+| LiDAR cloud, **full rate** (~35 Mbit/s offered) | 80 msgs in 8 s, **10.0 Hz**, 20180 points |
+| `/lowstate` (1 kHz) | 5464 msgs in 6 s, **910 Hz** |
+| domain 42 palm camera JPEG | 8.1 Hz |
+| domain 42 RealSense depth | 0 msgs: **the driver was broken, not the Wi-Fi** (0 on the cable too, see docs/06) |
+
+The relay saw about 9 packets/s from the robot LAN and ~0.4/s from the laptop. Not yet tried: a walking robot (signal
+changes with the distance), the viz stack over Wi-Fi, long runs.
+
+Order of attempts that led here, for the record: test 1 (NAT, 0 msgs), test 2 (same subnet, 0 msgs), cable experiments
+(only multicast SPDP gets PC1 to talk), test 3 (relay: works). Two earlier runs of test 3 were void: the AP had a new
+name after a robot reboot (see above), and my relay start command killed itself (`pkill -f PATTERN` also matches the
+shell whose command line contains PATTERN: use a pid file).
+
+## Ways out (1 and the relay of test 3 done, 2 and 3 not needed for now)
 
 1. **Make the laptop look like it is on the robot LAN** (tried, route/ARP/ping fine, DDS discovery still fails; runtime only, root on the Jetson): give the laptop's Wi-Fi a
    second address 192.168.123.98, on the Jetson `ip route add 192.168.123.98/32 dev wlan0` and

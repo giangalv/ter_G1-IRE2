@@ -6,7 +6,9 @@
 #   build            colcon build of the wrapper (sources already in ~/g1_realsense/src)
 #   start [args]     run the driver in the background; args are `ros2 launch` args, they win over the defaults
 #   stop | status | log
-#   boot             what the @reboot cron entry runs: wait for the LAN address, then `start` (one retry)
+#   check            are depth frames really arriving (8 s)? exit 1 if not
+#   boot             what the @reboot cron entry runs: wait for the LAN address, then `start` and check that frames
+#                    arrive (`check`), up to 3 attempts
 #   autostart-on | autostart-off | autostart-status   add / remove / show that crontab entry (user crontab, no root)
 #
 # Why it looks like this (docs/06-realsense-ros2.md):
@@ -43,6 +45,26 @@ env_setup() {
 
 # the pid file outlives a reboot, and a stale pid can belong to an unrelated process then: check the command line too
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null && tr '\0' ' ' < "/proc/$(cat "$PIDFILE")/cmdline" 2>/dev/null | grep -q realsense2_camera; }
+
+# A started driver can be alive and still dead on the USB side (2026-11-06, first start after a robot boot: "control_transfer
+# returned error" from the first second on, 0 frames for an hour, process running). So count depth frames for 8 s.
+streaming() {
+    env_setup
+    python3 - <<'PY'
+import sys, time, rclpy
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
+rclpy.init()
+node = rclpy.create_node("g1_rs_streaming_check")
+count = [0]
+node.create_subscription(Image, "/camera/depth/image_rect_raw", lambda m: count.__setitem__(0, count[0] + 1), qos_profile_sensor_data)
+t0 = time.time()
+while time.time() - t0 < 8:
+    rclpy.spin_once(node, timeout_sec=0.2)
+print(f"depth frames in 8 s: {count[0]}")
+sys.exit(0 if count[0] >= 20 else 1)
+PY
+}
 
 case "${1:-status}" in
 build)
@@ -98,8 +120,15 @@ boot)
     echo "$(date '+%F %T') boot: waiting for $JETSON_IP"
     for _ in $(seq 1 60); do ip -4 addr show 2>/dev/null | grep -q "inet $JETSON_IP/" && break; sleep 2; done
     sleep 20   # let master_service and the USB hub settle
-    bash "$0" start
-    if ! running; then echo "$(date '+%F %T') boot: first start failed, retrying"; sleep 20; bash "$0" start; fi
+    for attempt in 1 2 3; do
+        bash "$0" start
+        if running && streaming; then echo "$(date '+%F %T') boot: streaming (attempt $attempt)"; break; fi
+        echo "$(date '+%F %T') boot: attempt $attempt not streaming, restarting"
+        bash "$0" stop; sleep 5
+    done
+    ;;
+check)
+    if running && streaming; then echo "streaming"; else echo "NOT streaming"; exit 1; fi
     ;;
 autostart-on)
     [ "$(basename "$0")" = realsense_ros2_remote.sh ] && [ -f "$0" ] || { echo "run it as a file (tools/realsense_ros2.sh autostart on copies it)"; exit 1; }
@@ -117,7 +146,13 @@ autostart-status)
 stop)
     if running; then
         kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
-        for _ in 1 2 3 4 5 6 7 8; do running || break; sleep 1; done
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do running || break; sleep 1; done
+        if running; then   # a driver stuck on the USB side ignores SIGINT
+            echo "SIGINT ignored, killing"
+            kill -KILL -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -KILL "$(cat "$PIDFILE")" 2>/dev/null
+            pkill -KILL -f '[r]ealsense2_camera_node' 2>/dev/null
+            sleep 1
+        fi
         running && { echo "did not stop: pid $(cat "$PIDFILE")"; exit 1; }
         echo "stopped"
     else
@@ -133,6 +168,6 @@ log)
     tail -40 "$LOG" 2>/dev/null
     ;;
 *)
-    echo "usage: $0 build|start [launch args]|stop|status|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
+    echo "usage: $0 build|start [launch args]|stop|status|check|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
     ;;
 esac

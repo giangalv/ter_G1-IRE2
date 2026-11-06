@@ -71,8 +71,14 @@ it dropped to ~2.5 Hz while the raw topics were still at ~10 Hz.
 sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root). The user asked for it on 2026-11-05
 (the permission check refused that first call) and confirmed on 2026-11-06; it is **installed**.
 
-* Tested without a reboot: the Jetson's copy of `boot` run under `env -i` (cron's minimal environment) brought the
-  driver up in ~40 s, colour and depth open. Still to be seen at a real boot: read `~/g1_realsense/boot.log`.
+* **A running driver is not a streaming driver.** On 2026-11-06 the first start after a robot boot (the autostart test,
+  launched ~8 min after the boot) had `control_transfer returned error` from its first second, ~10 per second for an hour
+  (32 000 lines), the process alive and **0 frames** on both streams; `stop` + `start` fixed it at once (15 Hz colour and
+  depth). I had only checked "Node Is Up" and wrongly called it working. Now `realsense_ros2_remote.sh check` counts
+  depth frames for 8 s (exit 1 if < 20), `boot` uses it and restarts up to 3 times, and `stop` escalates to SIGKILL
+  when the driver ignores SIGINT (it did: "did not stop"). The retry path itself has not been seen in real life: the
+  tested case is a clean start under `env -i` (cron's environment): attempt 1, 121 frames in 8 s. Read
+  `~/g1_realsense/boot.log` after the next robot boot.
 * `running()` also checks `/proc/<pid>/cmdline`: the pid file survives a reboot and its pid can belong to an
   unrelated process then, which would make `start` say "already running" and never start the driver.
 * Every boot loses the phone-app head video (`videohub_pc4` is stopped, see above).
