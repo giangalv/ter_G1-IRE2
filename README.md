@@ -16,7 +16,7 @@ all of it from a laptop. Everything here was measured on the real robot
 | [docs/04-lidar-mid360.md](docs/04-lidar-mid360.md) | Livox MID-360 in the head: address, **the DDS topics that carry its point cloud (10 Hz) and IMU (200 Hz)** |
 | [docs/05-unitree-dds.md](docs/05-unitree-dds.md) | Native Unitree topics seen over DDS (arms, hands, SLAM API) |
 | [docs/06-realsense-ros2.md](docs/06-realsense-ros2.md) | D435i depth + colour as ROS 2 topics: driver built on the Jetson, why it needs its own DDS domain, why the app video stops |
-| [docs/07-wifi.md](docs/07-wifi.md) | The robot's own access point, what a Wi-Fi client reaches (measured), why DDS domain 0 does not cross the NAT, options |
+| [docs/07-wifi.md](docs/07-wifi.md) | The robot's own access point (random name at every boot), what a Wi-Fi client reaches, how DDS domain 0 works over it (discovery relay on the Jetson, `tools/g1_wifi.sh`), measured rates per viz profile. |
 | [tools/](tools/README.md) | Small scripts used to find all of the above |
 
 ## The robot at a glance
