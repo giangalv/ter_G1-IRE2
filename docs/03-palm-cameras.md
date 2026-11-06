@@ -68,7 +68,12 @@ crashes, so the node uses **domain 42** with Fast DDS on 192.168.123.164 and the
   when idle; they wake up when opened.
 * Seen live in the 2D view (ter_G1U6 `hand_2d`): both cameras look at the palm side with the finger bases at the
   top of the picture, i.e. the same way up as the flat-hand diagram.
-* Stop it with `hand_cameras_ros2.sh stop`. It is **not** started at boot.
+* Stop it with `hand_cameras_ros2.sh stop`.
+* **Autostart (installed 2026-11-06):** `hand_cameras_ros2.sh autostart on|off|status` puts one `@reboot` line in the
+  `unitree` user crontab (same mechanism as the RealSense one, docs/06): wait for 192.168.123.164, **60 s** (so that
+  the RealSense autostart, whose reset makes the USB hub drop the palm cameras, is done), `start`, one retry; log
+  `~/g1_hand_cameras/boot.log`. Tested without a reboot under `env -i`: both cameras available. Needs the package
+  copied once by `install`.
 
 ## Not done yet
 

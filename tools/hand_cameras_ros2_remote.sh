@@ -4,6 +4,9 @@
 #
 #   start            run g1_hand_camera's hand_camera_node (python package copied by `install` to ~/g1_hand_cameras/py)
 #   stop | status | log
+#   boot             what the @reboot cron entry runs: wait for the LAN address, then 60 s (the RealSense autostart
+#                    resets the camera and the USB hub drops the palm cameras meanwhile), then `start` (one retry)
+#   autostart-on | autostart-off | autostart-status   add / remove / show that crontab entry (user crontab, no root)
 #
 # Same reasoning as the RealSense driver (docs/06): the Jetson has ROS 2 Foxy only, and in the robot's DDS
 # domain 0 Foxy's DDS dies, so the node runs in DOMAIN 42 with Fast DDS on 192.168.123.164 only; the laptop
@@ -27,7 +30,9 @@ env_setup() {
     export FASTRTPS_DEFAULT_PROFILES_FILE=$WS/fastdds_lan.xml
 }
 
-running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+CRON_TAG="# g1_hand_cameras_autostart"
+# the pid file outlives a reboot, and a stale pid can belong to an unrelated process then: check the command line too
+running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null && tr '\0' ' ' < "/proc/$(cat "$PIDFILE")/cmdline" 2>/dev/null | grep -q hand_camera_node; }
 
 case "${1:-status}" in
 start)
@@ -80,7 +85,28 @@ status)
 log)
     tail -40 "$LOG" 2>/dev/null
     ;;
+boot)
+    export PATH="$PATH:/usr/sbin:/sbin"
+    echo "$(date '+%F %T') boot: waiting for $JETSON_IP"
+    for _ in $(seq 1 60); do ip -4 addr show 2>/dev/null | grep -q "inet $JETSON_IP/" && break; sleep 2; done
+    sleep 60
+    bash "$0" start
+    if ! running; then echo "$(date '+%F %T') boot: first start failed, retrying"; sleep 20; bash "$0" start; fi
+    ;;
+autostart-on)
+    [ "$(basename "$0")" = hand_cameras_ros2_remote.sh ] && [ -f "$0" ] || { echo "run it as a file (tools/hand_cameras_ros2.sh autostart on copies it)"; exit 1; }
+    LINE="@reboot /bin/bash $0 boot >> $WS/boot.log 2>&1 $CRON_TAG"
+    ( crontab -l 2>/dev/null | grep -vF "$CRON_TAG"; echo "$LINE" ) | crontab -
+    echo "autostart on: $LINE"
+    ;;
+autostart-off)
+    ( crontab -l 2>/dev/null | grep -vF "$CRON_TAG" ) | crontab - 2>/dev/null || crontab -r 2>/dev/null
+    echo "autostart off"
+    ;;
+autostart-status)
+    crontab -l 2>/dev/null | grep -F "$CRON_TAG" || echo "autostart off"
+    ;;
 *)
-    echo "usage: $0 start [node args]|stop|status|log"; exit 2
+    echo "usage: $0 start [node args]|stop|status|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
     ;;
 esac

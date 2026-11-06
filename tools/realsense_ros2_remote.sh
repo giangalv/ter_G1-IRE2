@@ -41,7 +41,8 @@ env_setup() {
     export FASTRTPS_DEFAULT_PROFILES_FILE=$WS/fastdds_lan.xml
 }
 
-running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; }
+# the pid file outlives a reboot, and a stale pid can belong to an unrelated process then: check the command line too
+running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null && tr '\0' ' ' < "/proc/$(cat "$PIDFILE")/cmdline" 2>/dev/null | grep -q realsense2_camera; }
 
 case "${1:-status}" in
 build)

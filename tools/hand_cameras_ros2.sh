@@ -4,6 +4,7 @@
 #   tools/hand_cameras_ros2.sh install      once (and after every change): copy the g1_hand_camera python package to the Jetson
 #   tools/hand_cameras_ros2.sh start [node args]
 #   tools/hand_cameras_ros2.sh stop | status | log
+#   tools/hand_cameras_ros2.sh autostart on|off|status    start them at every Jetson boot (user crontab @reboot, no root)
 #
 # Needs: ssh access to unitree@192.168.123.164 (override with G1_JETSON_SSH="ssh other@host"), tar, and the
 # ter_G1U6 sources (G1_HAND_CAMERA_SRC, default ~/ter-home/ter_G1U6/src/g1_hand_camera). Everything lands in
@@ -26,7 +27,19 @@ install)
 start | stop | status | log)
     remote "$@"
     ;;
+autostart)
+    case "${2:-status}" in
+    on)
+        $JETSON_SSH 'mkdir -p ~/g1_hand_cameras && cat > ~/g1_hand_cameras/hand_cameras_ros2_remote.sh && chmod +x ~/g1_hand_cameras/hand_cameras_ros2_remote.sh' < "$HERE/hand_cameras_ros2_remote.sh"
+        $JETSON_SSH 'bash ~/g1_hand_cameras/hand_cameras_ros2_remote.sh autostart-on'
+        ;;
+    off | status)
+        remote "autostart-$2"
+        ;;
+    *) echo "usage: $0 autostart on|off|status"; exit 2 ;;
+    esac
+    ;;
 *)
-    echo "usage: $0 install|start [node args]|stop|status|log"; exit 2
+    echo "usage: $0 install|start [node args]|stop|status|log|autostart on|off|status"; exit 2
     ;;
 esac
