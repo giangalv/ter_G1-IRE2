@@ -52,6 +52,23 @@ on the shared USB 5 V when the D435i starts streaming (not traced). So any node 
 reads them must reopen the device when it vanishes, especially right after the head
 video starts or restarts.
 
+**Not reproduced with the ROS driver, 2026-11-06 14:50.** 10 start/stop cycles of `realsense_ros2.sh` (5 with the USB power
+settings of docs/06 applied, 5 without; 0-2 hardware resets of the D435i per cycle, counted in `dmesg` by timestamp over
+28 s after each start): **no disconnect of the camera hub, of the cameras or of anything behind the 10-port hub, ever.** The
+7 of 7 above were with other readers of the D435i (the app's video hub, `gst-launch-1.0`). So with the current setup the
+D435i start does not make the camera box drop, and moving the box to another USB-C port for power is not needed for that. If
+the drops come back (a node reconnecting every few seconds), `dmesg -T | grep 'USB disconnect'` shows them.
+
+### USB layout as the Jetson sees it (2026-11-06)
+
+Everything external sits behind one Realtek RTS5411 4-port hub, which has a USB 2.0 side (`1-2`, bus 1, 480 Mbit/s) and a USB 3.0
+side (`2-2`, bus 2, 5 Gbit/s): its port 2 -> the 10-port USB 2.0 hub `1a86:809f` (`1-2.2`) with the two palm cameras on its ports
+1 and 2, plus UART/SPI/I2C/JTAG, a dual serial, a card reader and a USB 10/100 LAN (`eth0`, link down; `eth1`, the robot LAN
+`192.168.123.164`, is PCIe); port 3 (USB 3.0 side) -> the D435i (`2-2.3`); port 4 -> the Wi-Fi radio of the AP (internal); port 1 -> nothing
+enumerates. How the four USB-C connectors on the robot map to these ports (the user: one powers the box of the hands' arrays,
+one goes to the box of the two palm cameras, one to the head camera, one free) was not checked: unplug a cable and see which
+`1-2.x` / `2-2.x` entry disappears.
+
 ## As ROS 2 images on the laptop (2026-11-05)
 
 `tools/hand_cameras_ros2.sh install|start|stop|status|log` runs the workspace's `g1_hand_camera/hand_camera_node`
