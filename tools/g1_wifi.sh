@@ -173,7 +173,8 @@ cmd_down() {
     nmcli device connect "$CABLE" > /dev/null 2>&1
     say "lab Wi-Fi back"
     if [ -n "${LAB_CONN:-}" ]; then nmcli -w 40 connection up "$LAB_CONN" > /dev/null 2>&1; else nmcli device connect "$WLAN" > /dev/null 2>&1; fi
-    for _ in $(seq 1 20); do ping -c1 -W1 1.1.1.1 > /dev/null 2>&1 && { say "internet is back"; return 0; }; sleep 2; done
+    # a TCP connect, not ping: many networks (the lab's included) drop ICMP to the outside
+    for _ in $(seq 1 20); do timeout 3 bash -c 'exec 3<>/dev/tcp/1.1.1.1/443' > /dev/null 2>&1 && { say "internet is back"; return 0; }; sleep 2; done
     say "no internet yet (lab Wi-Fi up? check by hand)"
 }
 

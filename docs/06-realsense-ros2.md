@@ -79,6 +79,16 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   when the driver ignores SIGINT (it did: "did not stop"). The retry path itself has not been seen in real life: the
   tested case is a clean start under `env -i` (cron's environment): attempt 1, 121 frames in 8 s. Read
   `~/g1_realsense/boot.log` after the next robot boot.
+* **Supervisor** (`realsense_ros2_remote.sh supervise`, started by `boot` after the checks, also by hand): every 30 s it runs
+  `check` and restarts the driver after 2 failed checks in a row (a USB reset like the one of 2026-11-06 at 18:22 Jetson time, "Disable of
+  device-initiated U1/U2 failed", leaves the node alive and 0 frames). Tested by SIGSTOP of the driver: restarted by itself in
+  ~2 min. `stop` touches `~/g1_realsense/user_stop` so the supervisor does not bring back a driver you stopped on purpose;
+  `start` removes it; `autostart off` kills the supervisor. Root cause of the reset not verified (suspects: USB3 U1/U2
+  power management, D435i `power/control=auto`); a fix would be a root change on the Jetson.
+* **JPEG colour node** (`tools/realsense_jpeg_node.py`, Foxy, `realsense_color_jpeg`): `/camera/color/image_raw` ->
+  `/camera/color/image_raw/compressed` at 10 Hz, quality 80, ~21 kB per frame (57 frames in 8 s measured), encodes only while
+  somebody subscribes. `realsense_ros2.sh start|autostart on` copy it with the remote script (`push_files`);
+  `start` / the supervisor start it, `stop` stops it. It is what makes the head colour affordable over the Wi-Fi (07).
 * `running()` also checks `/proc/<pid>/cmdline`: the pid file survives a reboot and its pid can belong to an
   unrelated process then, which would make `start` say "already running" and never start the driver.
 * Every boot loses the phone-app head video (`videohub_pc4` is stopped, see above).

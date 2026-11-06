@@ -103,8 +103,8 @@ shell whose command line contains PATTERN: use a pid file).
 
 ```
 G1_PW=<Jetson password> tools/g1_wifi.sh up        # robot on, cable still connected for the first time after a robot boot
-bash <ter_G1U6>/src/g1_viz/scripts/viz_real.sh wifi # RViz + hands + cameras over the Wi-Fi (G1_WIFI_PROFILE=light|lidar|full)
-G1_PW=... G1_CYCLONEDDS_URI=file://$HOME/.cache/g1_wifi_cyclonedds.xml tools/g1_up.sh   # LiDAR service on (needed for lidar|full)
+G1_WIFI_PROFILE=nav bash <ter_G1U6>/src/g1_viz/scripts/viz_real.sh wifi   # RViz over the Wi-Fi; profile nav | manip (default) | full
+G1_PW=... G1_CYCLONEDDS_URI=file://$HOME/.cache/g1_wifi_cyclonedds.xml tools/g1_up.sh   # LiDAR service on (needed for nav|full)
 G1_PW=<Jetson password> tools/g1_wifi.sh down      # everything back: cable, lab Wi-Fi, Jetson rules removed
 ```
 
@@ -115,21 +115,54 @@ by itself. The password of the AP is read once from the Jetson (read-only sudo) 
 lives only in the NetworkManager profile. Nothing persists on the robot: all lost at its next boot. **The laptop has one
 Wi-Fi card: while on the robot's AP it has no internet** (tested unattended, always with a watchdog that runs `down`).
 
-### Viz over the Wi-Fi, measured 2026-11-06 (laptop 2-3 m from the robot, nodes only, no RViz window)
+### Viz over the Wi-Fi: what to show depends on the task (profiles, measured 2026-11-06)
 
-| Profile | joint states | hand tactile (cable: 23 Hz) | palm cameras | LiDAR cloud | RealSense | hands' Modbus |
+The link carries roughly 60-100 Mbit/s and the offered load is more than that (LiDAR 35 Mbit/s, RealSense raw colour ~66,
+depth ~24, cloud ~8 after decimation), so a profile picks what is on, as the task changes:
+
+* **`nav`** (walking around): LiDAR + head camera (colour, depth cloud), no hands and no palm cameras.
+* **`manip`** (default; manipulating): hands (tactile) + palm cameras + head camera, no LiDAR.
+* **`full`**: everything; does not fit (see the table).
+
+`G1_WIFI_PROFILE=nav|manip|full tools... viz_real.sh wifi` starts the matching nodes and RViz config
+(`g1_real_nav.rviz`, `g1_real_manip.rviz`, `g1_real.rviz`). Two things make this cheap to switch:
+
+* **Head colour as JPEG from the Jetson** (`tools/realsense_jpeg_node.py`, node `realsense_color_jpeg`, 10 Hz, quality 80,
+  ~21 kB per frame = 1.2-1.7 Mbit/s instead of 66). The relay on the laptop decodes it. It encodes only while someone
+  subscribes. Started with the driver (`realsense_ros2.sh start`, also by the supervisor and by `autostart`).
+* **Lazy relays** (`lazy:=true` in `realsense_relay` and `hand_camera_relay`): a stream is pulled from the Jetson only
+  while somebody in the laptop's domain subscribes to its output, and released 5 s after the last subscriber leaves. So
+  ticking / unticking a display in RViz starts / stops that traffic; `nobody listening` costs nothing on the Wi-Fi.
+  (Raw LiDAR and tactile are not relayed: RViz or the hand bridge subscribe to them directly.)
+
+Measured with the nodes only (no RViz window), laptop 2-3 m from the robot, 15 s per topic:
+
+| Profile | joint states | hand tactile (cable: 23 Hz) | palm cameras | LiDAR cloud | head colour / depth cloud | hand bridge |
 |---|---|---|---|---|---|---|
-| full (everything) | 50 Hz | 0.4 / 0.1 Hz | 6 Hz | 10 Hz | colour 3.9, depth 3.5 Hz | **timeouts** (link saturated) |
-| `lidar` (no RealSense) | 50 Hz | 4.5 / 4.2 Hz | 5.9 Hz | 9.9 Hz | - | 10 errors in 50 s |
-| `light` (default: no LiDAR, no RealSense) | 50 Hz | **16.5 / 16.1 Hz** | 5.6 Hz | - | - | 4 errors in 50 s |
+| `nav` | 50 Hz | - | - | 9.8 Hz | 3.5 / 4.0 Hz | - |
+| `manip` | 50 Hz | 6.8 / 8.5 Hz | 5.7 / 6.0 Hz | - | **7.3** / 4.1 Hz | 7 errors in ~60 s |
+| `full` | 50 Hz | 2.0 / 3.4 Hz | 5.8 / 5.6 Hz | 9.9 Hz | 3.2 / 1.9 Hz | 6 errors in ~60 s |
 
-Why: the offered load is LiDAR 35 Mbit/s + RealSense colour (raw 640x360, ~66) + depth (~24) + cloud, more than the ~60-100
-Mbit/s the link really carries, and the hands' Modbus (tiny packets, needs low latency) queues behind it. Modbus on its
-own is fine over the Wi-Fi: 100/100 transactions per hand, with or without NAT (source .98 or 10.42.0.250), RTT median
+Earlier runs, before the JPEG colour (colour was the raw 66 Mbit/s): everything on gave tactile 0.4 / 0.1 Hz and
+Modbus timeouts; LiDAR + hands without RealSense gave tactile 4.5 Hz; hands + cameras with neither LiDAR nor RealSense
+gave tactile 16.5 Hz. So the head camera's depth cloud (~240 kB per message) is what still takes `manip`'s tactile from
+16 to 7 Hz; a coarser cloud would give it back (not done). In `nav` the colour is slower (3.5 Hz) than in `manip`
+(7.3 Hz) because the LiDAR is on the same link; whether the decode on the laptop also limits it was not separated.
+`lazy` verified in all three runs: with nobody listening 0 pulls started; the probe started both RealSense groups
+and they were released 5 s after it ended. On the cable: colour 4.7 Hz, depth 7.4 Hz through the same path.
+
+Why the profiles are needed even with a second laptop Wi-Fi card (internet + robot at the same time): it keeps the
+internet, the bandwidth of the robot link stays the same. A USB Wi-Fi dongle on the **robot** would not help either:
+its Realtek USB card is already the AP; the limit is the 2.4 GHz channel 6, 20 MHz that Unitree's `start_ap.sh` sets at
+every boot (5 GHz channels 36/149 are allowed; changing it is a persistent root change: not done).
+The hands' Modbus on its own is fine over the Wi-Fi: 100/100 transactions per hand, with or without NAT, RTT median
 3-12 ms, p99 17-66 ms, 125-register answers 12 ms. The hand bridge's default 20 ms timeout is for the cable: over the
-Wi-Fi `viz_real.sh wifi` sets `hand_tcp_timeout_s` 0.15. Ideas to carry more: a compressed RealSense colour stream,
-a decimated cloud made on the Jetson (needs its own DDS domain), a Wi-Fi 5 GHz AP (the AP is 2.4 GHz channel 6).
-Not tested yet: a walking robot, distance, RViz itself over the Wi-Fi.
+Wi-Fi `viz_real.sh wifi` sets `hand_tcp_timeout_s` 0.15 (still some errors under load, none with the hands off).
+Not tested yet: a walking robot, distance, RViz itself over the Wi-Fi (displays and their enabled state are in the
+configs; `g1_real_manip.rviz` has the LiDAR off, `g1_real_nav.rviz` the tactile off).
+
+`g1_wifi.sh up/down` checks the internet with a TCP connect to 1.1.1.1:443, not ping: the lab network drops ICMP to
+the outside, which made `down` say "no internet yet" although it was back.
 
 ## Ways out (1 and the relay of test 3 done, 2 and 3 not needed for now)
 

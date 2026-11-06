@@ -15,6 +15,11 @@ TAG=4.0.4
 COMMIT=8abb4657c0add15f87b0edbfb67eaba2c1c2c439   # realsense-ros 4.0.4: wants librealsense 2.50.0
 
 remote() { $JETSON_SSH bash -s -- "$@" < "$HERE/realsense_ros2_remote.sh"; }
+# the remote script (also what cron runs) and the colour-JPEG node live in ~/g1_realsense on the Jetson
+push_files() {
+    tar czf - -C "$HERE" realsense_ros2_remote.sh realsense_jpeg_node.py \
+        | $JETSON_SSH 'mkdir -p ~/g1_realsense && tar xzf - -C ~/g1_realsense && chmod +x ~/g1_realsense/realsense_ros2_remote.sh'
+}
 
 case "${1:-status}" in
 install)
@@ -28,12 +33,13 @@ install)
     remote build
     ;;
 start | stop | status | check | log)
+    [ "$1" = start ] && push_files
     remote "$@"
     ;;
 autostart)
     case "${2:-status}" in
     on)
-        $JETSON_SSH 'mkdir -p ~/g1_realsense && cat > ~/g1_realsense/realsense_ros2_remote.sh && chmod +x ~/g1_realsense/realsense_ros2_remote.sh' < "$HERE/realsense_ros2_remote.sh"
+        push_files
         $JETSON_SSH 'bash ~/g1_realsense/realsense_ros2_remote.sh autostart-on'
         ;;
     off | status)

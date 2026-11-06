@@ -7,6 +7,7 @@
 #   start [args]     run the driver in the background; args are `ros2 launch` args, they win over the defaults
 #   stop | status | log
 #   check            are depth frames really arriving (8 s)? exit 1 if not
+#   supervise        loop (what `boot` ends in): every ~30 s `check`, restart the driver after two failures; `stop` pauses it, `start` resumes
 #   boot             what the @reboot cron entry runs: wait for the LAN address, then `start` and check that frames
 #                    arrive (`check`), up to 3 attempts
 #   autostart-on | autostart-off | autostart-status   add / remove / show that crontab entry (user crontab, no root)
@@ -46,6 +47,24 @@ env_setup() {
 # the pid file outlives a reboot, and a stale pid can belong to an unrelated process then: check the command line too
 running() { [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null && tr '\0' ' ' < "/proc/$(cat "$PIDFILE")/cmdline" 2>/dev/null | grep -q realsense2_camera; }
 
+JPEG_PID=$WS/jpeg.pid
+jpeg_running() { [ -f "$JPEG_PID" ] && kill -0 "$(cat "$JPEG_PID")" 2>/dev/null && tr '\0' ' ' < "/proc/$(cat "$JPEG_PID")/cmdline" 2>/dev/null | grep -q realsense_jpeg_node; }
+# colour as JPEG for the Wi-Fi (realsense_jpeg_node.py, copied next to this script); idempotent
+jpeg_start() {
+    jpeg_running && return 0
+    [ -f "$WS/realsense_jpeg_node.py" ] || return 0
+    env_setup
+    setsid nohup python3 "$WS/realsense_jpeg_node.py" > "$WS/jpeg.log" 2>&1 < /dev/null &
+    echo $! > "$JPEG_PID"
+}
+jpeg_stop() {
+    if jpeg_running; then
+        kill -INT "$(cat "$JPEG_PID")" 2>/dev/null; sleep 1
+        jpeg_running && kill -KILL "$(cat "$JPEG_PID")" 2>/dev/null
+    fi
+    rm -f "$JPEG_PID"
+}
+
 # A started driver can be alive and still dead on the USB side (2026-11-06, first start after a robot boot: "control_transfer
 # returned error" from the first second on, 0 frames for an hour, process running). So count depth frames for 8 s.
 streaming() {
@@ -66,6 +85,25 @@ sys.exit(0 if count[0] >= 20 else 1)
 PY
 }
 
+do_stop() {
+    if running; then
+        kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do running || break; sleep 1; done
+        if running; then   # a driver stuck on the USB side ignores SIGINT
+            echo "SIGINT ignored, killing"
+            kill -KILL -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -KILL "$(cat "$PIDFILE")" 2>/dev/null
+            pkill -KILL -f '[r]ealsense2_camera_node' 2>/dev/null
+            sleep 1
+        fi
+        running && { echo "did not stop: pid $(cat "$PIDFILE")"; exit 1; }
+        echo "stopped"
+    else
+        echo "not running"
+    fi
+    rm -f "$PIDFILE"
+    jpeg_stop
+}
+
 case "${1:-status}" in
 build)
     [ -d "$WS/src/realsense2_camera" ] || { echo "no sources in $WS/src (run tools/realsense_ros2.sh install from the laptop)"; exit 1; }
@@ -76,7 +114,8 @@ build)
     ;;
 start)
     shift
-    running && { echo "already running (pid $(cat "$PIDFILE")); stop it first"; exit 0; }
+    rm -f "$WS/user_stop"
+    running && { echo "already running (pid $(cat "$PIDFILE")); stop it first"; jpeg_start; exit 0; }
     [ -f "$WS/install/setup.bash" ] || { echo "not built: run tools/realsense_ros2.sh install"; exit 1; }
     # only the processes that read /dev/video4 (not videohub_pc4_chest, which reads the chest camera)
     HOLDERS='[v]ideohub_pc4 /dev/video4|[v]ideohub_pc4_patched'
@@ -112,6 +151,7 @@ XML
     setsid nohup ros2 launch realsense2_camera rs_launch.py $DEFAULTS "$@" > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
     sleep 20   # initial_reset re-enumerates the camera first (~7 s)
+    jpeg_start
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "DIED, see $LOG"; fi
     grep -E "Node Is Up|Device Name|USB type|Open profile|ERROR|died" "$LOG" | grep -v hwmon | cut -c1-200 | head -8
     ;;
@@ -120,12 +160,13 @@ boot)
     echo "$(date '+%F %T') boot: waiting for $JETSON_IP"
     for _ in $(seq 1 60); do ip -4 addr show 2>/dev/null | grep -q "inet $JETSON_IP/" && break; sleep 2; done
     sleep 20   # let master_service and the USB hub settle
+    bash "$0" start
     for attempt in 1 2 3; do
-        bash "$0" start
         if running && streaming; then echo "$(date '+%F %T') boot: streaming (attempt $attempt)"; break; fi
         echo "$(date '+%F %T') boot: attempt $attempt not streaming, restarting"
-        bash "$0" stop; sleep 5
+        bash "$0" _restart
     done
+    exec bash "$0" supervise
     ;;
 check)
     if running && streaming; then echo "streaming"; else echo "NOT streaming"; exit 1; fi
@@ -138,27 +179,39 @@ autostart-on)
     ;;
 autostart-off)
     ( crontab -l 2>/dev/null | grep -vF "$CRON_TAG" ) | crontab - 2>/dev/null || crontab -r 2>/dev/null
+    [ -f "$WS/supervise.pid" ] && kill "$(cat "$WS/supervise.pid")" 2>/dev/null
     echo "autostart off"
     ;;
 autostart-status)
     crontab -l 2>/dev/null | grep -F "$CRON_TAG" || echo "autostart off"
     ;;
 stop)
-    if running; then
-        kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do running || break; sleep 1; done
-        if running; then   # a driver stuck on the USB side ignores SIGINT
-            echo "SIGINT ignored, killing"
-            kill -KILL -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -KILL "$(cat "$PIDFILE")" 2>/dev/null
-            pkill -KILL -f '[r]ealsense2_camera_node' 2>/dev/null
-            sleep 1
-        fi
-        running && { echo "did not stop: pid $(cat "$PIDFILE")"; exit 1; }
-        echo "stopped"
-    else
-        echo "not running"
+    touch "$WS/user_stop"   # tells `supervise` that this stop is wanted
+    do_stop
+    ;;
+_restart)
+    do_stop; sleep 5; bash "$0" start
+    ;;
+supervise)
+    # Keeps the driver streaming. 2026-11-06: the D435i got a USB3 link-power error + a kernel reset while the driver ran
+    # (twice in an hour); the process stayed alive with 0 frames. Check every ~30 s, restart after two failed checks.
+    if [ -f "$WS/supervise.pid" ] && kill -0 "$(cat "$WS/supervise.pid")" 2>/dev/null \
+        && tr '\0' ' ' < "/proc/$(cat "$WS/supervise.pid")/cmdline" 2>/dev/null | grep -q supervise; then
+        echo "already supervising (pid $(cat "$WS/supervise.pid"))"; exit 0
     fi
-    rm -f "$PIDFILE"
+    echo $$ > "$WS/supervise.pid"
+    bad=0
+    while true; do
+        sleep 30
+        [ -f "$WS/user_stop" ] && { bad=0; continue; }
+        jpeg_start
+        if running && streaming > /dev/null 2>&1; then bad=0; continue; fi
+        bad=$((bad + 1))
+        [ $bad -lt 2 ] && continue
+        echo "$(date '+%F %T') supervise: not streaming twice in a row, restarting the driver"
+        bash "$0" _restart
+        bad=0
+    done
     ;;
 status)
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "not running"; fi
@@ -168,6 +221,6 @@ log)
     tail -40 "$LOG" 2>/dev/null
     ;;
 *)
-    echo "usage: $0 build|start [launch args]|stop|status|check|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
+    echo "usage: $0 build|start [launch args]|stop|status|check|supervise|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
     ;;
 esac
