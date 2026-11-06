@@ -7,7 +7,7 @@
 # Idempotent: a service that is already on / a driver that already runs is left alone. Nothing is
 # changed permanently on the robot; the switches are lost at the next boot (that is why this exists).
 # Needs: the unitree_api messages (G1_WS_SETUP, default the ter_G1U6 workspace install), DDS on the robot NIC
-# (G1_NIC, default enp59s0), ssh to the Jetson (password in G1_PW, see askpass.sh). docs/04 and docs/06.
+# (G1_NIC, default enp59s0; or G1_CYCLONEDDS_URI to give the whole Cyclone config, as over Wi-Fi), ssh to the Jetson (password in G1_PW, see askpass.sh). docs/04 and docs/06.
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NIC=${G1_NIC:-enp59s0}
@@ -18,7 +18,11 @@ source /opt/ros/humble/setup.bash
 [ -f "$WS_SETUP" ] && source "$WS_SETUP"
 set -u
 export ROS_LOCALHOST_ONLY=0 ROS_DOMAIN_ID=0 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export CYCLONEDDS_URI="<CycloneDDS><Domain Id=\"any\"><General><Interfaces><NetworkInterface name=\"$NIC\" priority=\"default\" multicast=\"default\"/></Interfaces></General></Domain></CycloneDDS>"
+if [ -n "${G1_CYCLONEDDS_URI:-}" ]; then   # e.g. over the robot's Wi-Fi: file://~/.cache/g1_wifi_cyclonedds.xml (tools/g1_wifi.sh env)
+    export CYCLONEDDS_URI="$G1_CYCLONEDDS_URI"
+else
+    export CYCLONEDDS_URI="<CycloneDDS><Domain Id=\"any\"><General><Interfaces><NetworkInterface name=\"$NIC\" priority=\"default\" multicast=\"default\"/></Interfaces></General></Domain></CycloneDDS>"
+fi
 python3 -c 'import unitree_api.msg' 2>/dev/null || { echo "unitree_api messages not found (source the workspace: G1_WS_SETUP=$WS_SETUP)"; exit 1; }
 if [ -n "${G1_PW:-}" ]; then
     export SSH_ASKPASS="$HERE/askpass.sh" SSH_ASKPASS_REQUIRE=force DISPLAY=${DISPLAY:-:0}
