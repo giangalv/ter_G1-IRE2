@@ -85,6 +85,16 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   Jetson time during a Wi-Fi test (frames stopped, back ~1.5 min later); causes not found. `stop` touches
   `~/g1_realsense/user_stop` so the supervisor does not bring back a driver you stopped on purpose; `start` removes it;
   `autostart off` kills the supervisor. Look for `supervise:` lines in `~/g1_realsense/boot.log`.
+  **What the dead state looks like** (log kept by the supervisor as `~/g1_realsense/run.before-restart.<mmdd-HHMMSS>.log`,
+  restart of 2026-11-06 22:21:09): the driver process stays alive, the camera works for about 47 s after the start, then at
+  22:18:53 libusb returns `Device or resource busy` on `control_transfer` and `usb_request_queue`, `uvc streamer watchdog
+  triggered` appears for the colour and depth endpoints, `reset_endpoint` fails, and the same error repeats about 3700 times
+  until the supervisor restarts the driver. The kernel logged nothing at that moment. The camera is on USB 3.2 (5000M), so
+  it is not bandwidth. What is installed: librealsense 2.50.0 (its release notes recommend D400 firmware 5.13.0.50) and
+  camera firmware 05.15.01.55, plus `hwmon command 0x80 failed (HW not ready)` at start. The mismatch is a hypothesis, not a
+  verified cause; changing the firmware or the library has not been tried. Restarts counted on 2026-11-06 (Jetson time,
+  from `boot.log`): 18:49, 19:01 (my SIGSTOP test), 21:04, 21:09, 21:25, 21:35, 21:49 (during my stop/start tests), 22:17,
+  22:21, also with the runtime USB fix active.
 * **The kernel messages `Disable of device-initiated U1/U2 failed` + `reset SuperSpeed Gen 1 USB device` are not a sign of
   failure**: they appear at every deliberate hardware reset of the camera (`initial_reset:=true`), also in the clean boot of
   2026-11-06 20:39 (streaming at the first attempt, 115 frames in 8 s). An earlier version of this page took them for the
