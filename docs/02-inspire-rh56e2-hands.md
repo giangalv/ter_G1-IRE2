@@ -153,9 +153,17 @@ every second and draws a heat map of the most active one.
   check `ERROR`, `FORCE_SET` (factory 2000) and the pose, keep the fingers of the
   people clear of the hand, and remember that `SPEED_SET` 300 is not slow (the
   whole stroke took about 2 s).
+* The same two registers were then written by `tools/close_hand.py` (2026-11-06, user-approved, right hand first, then left):
+  `SPEED_SET` 300, `ANGLE_SET` `[100, 100, 100, 100, 200, <thumb rotation as read>]`, i.e. a relaxed fist (fingers 100, thumb
+  bend 200, nothing squeezed). Both hands got there in about 2 s: fingers 99-100, thumb bend 198, `ERROR` = 0, `FORCE_ACT` at most
+  202 (the abort limit is 700); `SPEED_SET` was restored to 1000. `FORCE_SET` (factory 2000) was still never written. The tool does
+  nothing without `--go`. Close the hands before moving the arms (fingers do not snag); the fist covers the palm cameras, open
+  again with `open_hand.py` before manipulation work.
 
 ## Tools
 
 * `tools/modbus_probe.py HOST` — read the main registers of one hand.
+* `tools/close_hand.py HOST [destra|sinistra] [--go]` — close one hand slowly to a relaxed fist; without `--go` it only reads and
+  prints the plan. `tools/open_hand.py` is the way back.
 * `tools/modbus_capture.py SECONDS PREFIX` — wide capture of both hands to `.npz`
   (word `k` of a sample = byte address `2k`).
