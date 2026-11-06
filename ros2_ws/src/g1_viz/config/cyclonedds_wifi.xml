@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Cyclone DDS for viewing the robot over ITS OWN WI-FI (access point G1-NX-AP-xxxxxx on the Jetson).
+  The laptop has a second address on the robot LAN's subnet ($G1_WIFI_ADDR, default 192.168.123.98); the Jetson routes it
+  (proxy ARP + forward rules) and relays the DDS discovery multicast to PC1, see tools/g1_wifi.sh and docs/07-wifi.md in the
+  base repo (ter_G1-IRE2). Multicast is used for the discovery packet only (PC1 only discovers a participant from that
+  one); data is unicast. Used by scripts/viz_real.sh wifi.
+  No SocketReceiveBufferSize request: Cyclone aborts when the kernel (net.core.rmem_max, 416 kB by default) cannot grant it.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface address="${G1_WIFI_ADDR:-192.168.123.98}"/>
+      </Interfaces>
+      <AllowMulticast>spdp</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+        <Peer address="192.168.123.161"/>
+        <Peer address="192.168.123.164"/>
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

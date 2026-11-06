@@ -1,0 +1,7 @@
+# Request a recovery plan for a confirmed failure (recovery_planner_node, offboard).
+# Escalation: L1 replay similar demo -> L2 safe waypoint + retry variation -> L3 human.
+
+FailureState failure
+---
+string recovery_action   # machine-readable recovery directive for the planner
+bool success

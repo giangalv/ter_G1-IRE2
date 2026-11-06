@@ -209,7 +209,10 @@ supervise)
         if running && streaming > /dev/null 2>&1; then bad=0; continue; fi
         bad=$((bad + 1))
         [ $bad -lt 2 ] && continue
-        echo "$(date '+%F %T') supervise: not streaming twice in a row, restarting the driver"
+        echo "$(date '+%F %T') supervise: not streaming twice in a row (driver process $(running && echo alive || echo gone)), restarting the driver"
+        # keep the log of the run that died (the restart overwrites run.log); the last 5 are kept
+        cp -f "$WS/run.log" "$WS/run.before-restart.$(date +%m%d-%H%M%S).log" 2>/dev/null
+        ls -t "$WS"/run.before-restart.*.log 2>/dev/null | tail -n +6 | xargs -r rm -f
         bash "$0" _restart
         bad=0
     done

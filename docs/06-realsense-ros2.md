@@ -30,7 +30,7 @@ removes it. The ssh target can be changed with `G1_JETSON_SSH="ssh user@host"`.
 * **The laptop** sees the camera with `ROS_DOMAIN_ID=42` (topics `/camera/...`, standard names), or
   — for the rest of the workspace — through `g1_unitree_bridge/realsense_relay`, which copies
   colour and depth into the robot's domain as `/g1/camera/{color,depth}/...` and builds a cloud
-  (ter_G1U6 repo).
+  (`ros2_ws/`).
 * **It cannot share the camera with Unitree's `videohub_pc4`.** When the driver first opened the D435i,
   `videohub_pc4_patched` (the app video, see 01) died with `An error occurred!` within seconds.
   `start` therefore stops `video_hub_pc4` (and the patched copy) first: **the phone app has no head
@@ -39,7 +39,7 @@ removes it. The ssh target can be changed with `G1_JETSON_SSH="ssh user@host"`.
 ## Verified (2026-11-05)
 
 Driver on the Jetson: depth 424x240 and colour 640x360, requested at 15 fps. Measured at the laptop
-**after** the ter_G1U6 relay (`g1_unitree_bridge/realsense_relay`, which also rate-limits), over the cable:
+**after** the `ros2_ws` relay (`g1_unitree_bridge/realsense_relay`, which also rate-limits), over the cable:
 
 | Topic in the robot's domain | Content | Rate seen |
 |---|---|---|
@@ -117,4 +117,4 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   (a 424x240 cloud is ~1.2 MB and would not survive the 416 kB buffer).
 * Starting any D435i stream makes the two palm cameras drop for ~1–2 s (03).
 * The depth origin of the optical frame and the 15 mm colour offset are not modelled in the TF used by
-  the ter_G1U6 viz (`d435_link` → optical frames, rotation only).
+  the `ros2_ws` viz (`d435_link` → optical frames, rotation only).

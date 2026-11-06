@@ -103,7 +103,7 @@ shell whose command line contains PATTERN: use a pid file).
 
 ```
 G1_PW=<Jetson password> tools/g1_wifi.sh up        # robot on, cable still connected for the first time after a robot boot
-G1_WIFI_PROFILE=nav bash <ter_G1U6>/src/g1_viz/scripts/viz_real.sh wifi   # RViz over the Wi-Fi; profile nav | manip (default) | full
+G1_WIFI_PROFILE=nav bash ros2_ws/src/g1_viz/scripts/viz_real.sh wifi   # RViz over the Wi-Fi; profile nav | manip (default) | full
 G1_PW=... G1_CYCLONEDDS_URI=file://$HOME/.cache/g1_wifi_cyclonedds.xml tools/g1_up.sh   # LiDAR service on (needed for nav|full)
 G1_PW=<Jetson password> tools/g1_wifi.sh down      # everything back: cable, lab Wi-Fi, Jetson rules removed
 ```

@@ -1,0 +1,11 @@
+# Top-level task execution action (server: subtask_planner_node).
+# Example: instruction = "pick up the red mug from the table and hand it to me"
+
+string instruction
+---
+SubtaskToken[] subtasks
+bool success
+string failure_reason
+---
+SubtaskToken current_subtask
+float32 overall_progress

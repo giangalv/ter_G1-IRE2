@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>g1_unitree_bridge</name>
+  <version>0.1.0</version>
+  <description>
+    Read-only bridge from the robot's native Unitree DDS state (unitree_hg/LowState on /lowstate or
+    /lf/lowstate) to the workspace topics: /g1/joint_states (BODY-41 order) and /g1/imu/data.
+    It never publishes anything towards the robot.
+  </description>
+  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>unitree_hg</depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,7 @@
+# Look up an object pose in the DynaMem spatio-semantic map (dynamem_node).
+# Falls back to ReMEmbR "last known position" on miss (see recovery_planner_node).
+
+string label
+---
+ObjectPose pose
+bool found

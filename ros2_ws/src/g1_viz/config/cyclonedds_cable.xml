@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Cyclone DDS for viewing the robot over the ETHERNET cable (192.168.123.0/24).
+  Multicast discovery works on the wire, so no peers are listed. The PC's NIC comes from
+  $G1_NIC (default: the laptop's enp59s0). Used by scripts/viz_real.sh cable.
+  No SocketReceiveBufferSize request: Cyclone aborts when the kernel (net.core.rmem_max, 416 kB
+  by default) cannot grant it, and RViz does not need 10 MB.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface name="${G1_NIC:-enp59s0}" priority="default" multicast="default"/>
+      </Interfaces>
+    </General>
+  </Domain>
+</CycloneDDS>

@@ -7,13 +7,13 @@
 #   tools/hand_cameras_ros2.sh autostart on|off|status    start them at every Jetson boot (user crontab @reboot, no root)
 #
 # Needs: ssh access to unitree@192.168.123.164 (override with G1_JETSON_SSH="ssh other@host"), tar, and the
-# ter_G1U6 sources (G1_HAND_CAMERA_SRC, default ~/ter-home/ter_G1U6/src/g1_hand_camera). Everything lands in
+# g1_hand_camera sources (G1_HAND_CAMERA_SRC, default ros2_ws/src/g1_hand_camera in this repo). Everything lands in
 # /home/unitree/g1_hand_cameras on the Jetson. The streams reach the laptop's domain 0 through
 # g1_unitree_bridge/hand_camera_relay. See docs/03-palm-cameras.md.
 set -eu
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 JETSON_SSH=${G1_JETSON_SSH:-ssh unitree@192.168.123.164}
-SRC=${G1_HAND_CAMERA_SRC:-$HOME/ter-home/ter_G1U6/src/g1_hand_camera}
+SRC=${G1_HAND_CAMERA_SRC:-$HERE/../ros2_ws/src/g1_hand_camera}
 
 remote() { $JETSON_SSH bash -s -- "$@" < "$HERE/hand_cameras_ros2_remote.sh"; }
 

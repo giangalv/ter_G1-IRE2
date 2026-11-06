@@ -1,0 +1,11 @@
+# Query the ReMEmbR episodic memory (served by remembr_reader_node, offboard).
+
+uint8 TEXT=0
+uint8 SPATIAL=1
+uint8 TEMPORAL=2
+
+string query
+uint8 type       # TEXT | SPATIAL | TEMPORAL
+---
+MemoryEntry[] results
+bool found

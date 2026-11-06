@@ -75,7 +75,7 @@ one goes to the box of the two palm cameras, one to the head camera, one free) w
 (Python package copied to `~/g1_hand_cameras/py` on the Jetson, no colcon, no root) with the Jetson's ROS 2 Foxy,
 Python 3.8, OpenCV 4.2. Same reasoning as the RealSense driver (docs/06): in the robot's DDS domain 0 Foxy's DDS
 crashes, so the node uses **domain 42** with Fast DDS on 192.168.123.164 and the laptop's
-`g1_unitree_bridge/hand_camera_relay` (ter_G1U6 repo) copies the streams to domain 0.
+`g1_unitree_bridge/hand_camera_relay` (`ros2_ws/`) copies the streams to domain 0.
 
 * Only the **JPEG** stream is published (`/g1/hand/{left,right}/camera/image_raw/compressed`, 10 Hz requested,
   quality 80): a raw 640x480 rgb8 frame is 920 kB and does not fit the laptop's 416 kB UDP receive buffer.
@@ -83,7 +83,7 @@ crashes, so the node uses **domain 42** with Fast DDS on 192.168.123.164 and the
   without trouble; the node logs `left/right palm camera available`.
 * `available` (latched `Bool`) is relayed too. Both USB devices are in `power/control=auto` and show `suspended`
   when idle; they wake up when opened.
-* Seen live in the 2D view (ter_G1U6 `hand_2d`): both cameras look at the palm side with the finger bases at the
+* Seen live in the 2D view (`ros2_ws` `hand_2d`): both cameras look at the palm side with the finger bases at the
   top of the picture, i.e. the same way up as the flat-hand diagram.
 * Stop it with `hand_cameras_ros2.sh stop`.
 * **Autostart (installed 2026-11-06):** `hand_cameras_ros2.sh autostart on|off|status` puts one `@reboot` line in the

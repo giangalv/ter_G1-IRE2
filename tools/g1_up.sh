@@ -6,12 +6,12 @@
 #
 # Idempotent: a service that is already on / a driver that already runs is left alone. Nothing is
 # changed permanently on the robot; the switches are lost at the next boot (that is why this exists).
-# Needs: the unitree_api messages (G1_WS_SETUP, default the ter_G1U6 workspace install), DDS on the robot NIC
+# Needs: the unitree_api messages (G1_WS_SETUP, default this repo's ros2_ws/install/setup.bash: run ros2_ws/setup.sh once), DDS on the robot NIC
 # (G1_NIC, default enp59s0; or G1_CYCLONEDDS_URI to give the whole Cyclone config, as over Wi-Fi), ssh to the Jetson (password in G1_PW, see askpass.sh). docs/04 and docs/06.
 set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NIC=${G1_NIC:-enp59s0}
-WS_SETUP=${G1_WS_SETUP:-$HOME/ter-home/ter_G1U6/install/setup.bash}
+WS_SETUP=${G1_WS_SETUP:-$HERE/../ros2_ws/install/setup.bash}
 
 set +u
 source /opt/ros/humble/setup.bash

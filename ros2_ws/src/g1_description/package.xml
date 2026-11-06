@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>g1_description</name>
+  <version>0.1.0</version>
+  <description>
+    Robot model of the G1 U6 for RViz2: Unitree's URDF/meshes (BSD-3, unitreerobotics/unitree_ros)
+    with the Inspire RH56 hands. The model files are not stored in this repository:
+    run fetch_assets.sh before building.
+  </description>
+  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

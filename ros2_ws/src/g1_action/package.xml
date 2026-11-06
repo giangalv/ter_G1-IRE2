@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>g1_action</name>
+  <version>0.1.0</version>
+  <description>
+    Safety-critical realtime execution package for the Unitree G1 EDU Ultimate D (U6)
+    hybrid VLA system: receding-horizon ActionChunk execution with dual-path blending
+    and a five-stage safety pipeline (action_executor_node), aggregate risk estimation
+    (risk_estimator_node) and the Inspire hand bridge, RH56E2 Modbus TCP or RH56DFQ serial (inspire_hand_bridge_node).
+  </description>
+  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>g1_interfaces</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
