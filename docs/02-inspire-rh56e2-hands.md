@@ -159,6 +159,17 @@ every second and draws a heat map of the most active one.
   202 (the abort limit is 700); `SPEED_SET` was restored to 1000. `FORCE_SET` (factory 2000) was still never written. The tool does
   nothing without `--go`. Close the hands before moving the arms (fingers do not snag); the fist covers the palm cameras, open
   again with `open_hand.py` before manipulation work.
+* Thumb (2026-11-06, right hand, user-approved, `tools/thumb_test.py --go`): the thumb has two actuators, **bend** (channel 4,
+  moved 1000 -> 198 by `close_hand.py`) and **rotation** (channel 5). `close_hand.py` and `open_hand.py` leave the rotation where it
+  is, so the first close did not rotate it. The rotation test (`SPEED_SET` 300, set value 956 -> 850 -> 700 -> 956, the other five
+  channels held) was reached at every step: measured 828, 683, back to 942, `ERROR` = 0, `FORCE_ACT` unchanged (thumb rotation
+  about -90 the whole time, no obstacle); every step finished within the first 0.4 s sample, so the rotation is fast even at
+  `SPEED_SET` 300. Lower values move the rotation away from the rest value ~956 (which way that is in space: see the user's note
+  below, if any). `open_hand.py HOST destra --keep-thumb` opens only the four fingers.
+* **The actuators rest ~15 counts below their set value** (set 969 -> measured 953-956; set 956 -> 941; set 850 -> 828; 700 -> 683).
+  Writing the measured value back as the new set value therefore makes a held channel creep by ~15 per run; the tools now write
+  back the last set value instead (`hold()`), unless it is far from the measured one (the register reads garbage after a
+  power-up: 117 / 110 on the thumb rotation while it measured 969).
 
 ## Tools
 

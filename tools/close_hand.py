@@ -51,10 +51,17 @@ def snapshot(tag):
     print(f"[{tag}]", st, flush=True); return st
 
 st = snapshot("before")
+
+def hold(i):
+    """value to write back for a channel that must not move: the last set value if it is sane (the actuator rests ~15 below it,
+    so writing the measured value back would make it creep), else the measured one (the register reads garbage after a power-up)"""
+    s, a = st["ANGLE_SET"][i], st["ANGLE_ACT"][i]
+    return s if 0 <= s <= 1000 and abs(s - a) <= 40 else max(0, a)
+
 if any(st["ERROR"]): sys.exit("ERROR register not zero - not writing anything")
 if max(abs(v) for v in st["FORCE_ACT"]) > FORCE_ABORT: sys.exit("fingers already loaded - not writing anything")
 
-thumb_rot = max(0, st["ANGLE_ACT"][5])
+thumb_rot = hold(5)
 target = [FINGERS, FINGERS, FINGERS, FINGERS, THUMB_BEND, thumb_rot]
 print(f"plan: SPEED_SET -> {SPEED_SLOW}, ANGLE_SET -> {target} (little, ring, middle, index, thumb bend, thumb rotation), "
       f"abort at |FORCE_ACT| > {FORCE_ABORT}, SPEED_SET back to {SPEED_FACTORY}", flush=True)

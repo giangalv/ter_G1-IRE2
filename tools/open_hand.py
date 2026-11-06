@@ -1,8 +1,13 @@
-"""Open one Inspire RH56E2 hand slowly (first write to the hardware, user-approved 2026-11-04)."""
+"""Open one Inspire RH56E2 hand slowly (first write to the hardware, user-approved 2026-11-04).
+
+usage: python3 open_hand.py HOST [destra|sinistra] [--keep-thumb]
+--keep-thumb opens only the four fingers; the thumb bend stays where it is (the thumb rotation is always kept)."""
 import socket, struct, subprocess, sys, time
 
-HOST = sys.argv[1]
-SIDE = sys.argv[2] if len(sys.argv) > 2 else "destra"   # only used in the spoken warning
+KEEP_THUMB = "--keep-thumb" in sys.argv
+_args = [a for a in sys.argv[1:] if a != "--keep-thumb"]
+HOST = _args[0]
+SIDE = _args[1] if len(_args) > 1 else "destra"   # only used in the spoken warning
 SPEED_SLOW, SPEED_FACTORY = 300, 1000
 FORCE_ABORT = 700          # |FORCE_ACT| above this -> hold position and stop (idle ~130)
 A_SET, F_SET, S_SET, A_ACT, F_ACT, CUR, ERR, STA, TMP = 1486, 1498, 1522, 1546, 1582, 1594, 1606, 1612, 1618
@@ -40,6 +45,13 @@ def snapshot(tag):
     print(f"[{tag}]", st, flush=True); return st
 
 st = snapshot("before")
+
+def hold(i):
+    """value to write back for a channel that must not move: the last set value if it is sane (the actuator rests ~15 below it,
+    so writing the measured value back would make it creep), else the measured one (the register reads garbage after a power-up)"""
+    s, a = st["ANGLE_SET"][i], st["ANGLE_ACT"][i]
+    return s if 0 <= s <= 1000 and abs(s - a) <= 40 else max(0, a)
+
 if any(st["ERROR"]): sys.exit("ERROR register not zero - not writing anything")
 if max(abs(v) for v in st["FORCE_ACT"]) > FORCE_ABORT: sys.exit("fingers already loaded - not writing anything")
 
@@ -50,8 +62,9 @@ wr(S_SET, [SPEED_SLOW] * 6)
 assert rd(S_SET, 6) == [SPEED_SLOW] * 6, "SPEED_SET readback differs"
 print("SPEED_SET -> 300 confirmed", flush=True)
 
-thumb_rot = max(0, st["ANGLE_ACT"][5])
-target = [1000, 1000, 1000, 1000, 1000, thumb_rot]
+thumb_rot = hold(5)
+thumb_bend = hold(4) if KEEP_THUMB else 1000
+target = [1000, 1000, 1000, 1000, thumb_bend, thumb_rot]
 wr(A_SET, target)
 print("ANGLE_SET written", target, "readback", [s16(v) for v in rd(A_SET, 6)], flush=True)
 
@@ -65,7 +78,7 @@ while time.time() - t0 < 12:
         print("ABORT: error/force limit -> holding current position", flush=True); break
     if prev is None or max(abs(a - b) for a, b in zip(ang, prev)) > 3: last_move = time.time()
     prev = ang
-    if all(a >= 950 for a in ang[:5]) or time.time() - last_move > 2.5: break
+    if all(a >= 950 for a in ang[:4 if KEEP_THUMB else 5]) or time.time() - last_move > 2.5: break
 
 wr(S_SET, [SPEED_FACTORY] * 6)
 final = snapshot("after")
