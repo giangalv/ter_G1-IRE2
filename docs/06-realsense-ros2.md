@@ -79,9 +79,10 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
   when the driver ignores SIGINT (it did: "did not stop"). The retry path itself has not been seen in real life: the
   tested case is a clean start under `env -i` (cron's environment): attempt 1, 121 frames in 8 s. Read
   `~/g1_realsense/boot.log` after the next robot boot.
-* **Supervisor** (`realsense_ros2_remote.sh supervise`, started by `boot` after the checks, also by hand): every 30 s it runs
-  `check` and restarts the driver after 2 failed checks in a row (the "running but dead" state of 2026-11-06: node alive, 0
-  frames). Tested by SIGSTOP of the driver: restarted by itself in ~2 min. It also acted by itself at 18:49, and at 21:04:56
+* **Supervisor** (`realsense_ros2_remote.sh supervise`, started by `boot` after the checks, also by hand): since 2026-11-09 it
+  looks every 2 s for the driver's own "camera lost" line and restarts at once (see "Dropouts" below); as a fallback every ~30 s
+  it runs `check` and restarts the driver after 2 failed checks in a row (the "running but dead" state of 2026-11-06: node
+  alive, 0 frames). Tested by SIGSTOP of the driver: restarted by itself in ~2 min. It also acted by itself at 18:49, and at 21:04:56
   Jetson time during a Wi-Fi test (frames stopped, back ~1.5 min later); causes not found. `stop` touches
   `~/g1_realsense/user_stop` so the supervisor does not bring back a driver you stopped on purpose; `start` removes it;
   `autostart off` kills the supervisor. Look for `supervise:` lines in `~/g1_realsense/boot.log`.
@@ -115,6 +116,46 @@ sleeps 20 s, runs `start`, retries once; log `~/g1_realsense/boot.log`; no root)
 * The LiDAR service has no equivalent on the Jetson: it is switched from the laptop (`tools/g1_up.sh`).
 * From the laptop without a terminal for ssh: `G1_PW`, `SSH_ASKPASS=tools/askpass.sh`, `SSH_ASKPASS_REQUIRE=force` and
   `G1_JETSON_SSH="ssh -o StrictHostKeyChecking=accept-new -o PreferredAuthentications=password -o PubkeyAuthentication=no unitree@192.168.123.164"`.
+
+## Dropouts: what is known, how the driver recovers (closed 2026-11-09)
+
+The camera stops delivering frames every 10-20 minutes. **The cause is not fixed; the recovery is fast and automatic.**
+
+* **Stack.** The Jetson now runs librealsense 2.54.2 + realsense-ros 4.54.1 (built in `~/g1_realsense_254`, no root; the
+  firmware 5.15.1.55 is accepted and `HW not ready` is gone); `realsense_ros2.sh stack 254|old` chooses it (marker file
+  `~/g1_realsense/stack`, applied at the next driver start), `old` is the 2.50.0 + 4.0.4 pair. **Neither stack avoids the
+  dropouts**: old stack 0.5-10 min between deaths (once 55); new stack ~20 min on 2026-11-06, and on 2026-11-09 a start
+  that was dead from the first second, then 13.5 min of streaming (18:01:15-18:14:38 Jetson time).
+* **What happens, with times (2026-11-09 18:14:37-38).** The kernel logs `usb 2-2.3: reset SuperSpeed Gen 1 USB device
+  number N using tegra-xusb` (preceded, as at every reset, by `Disable of device-initiated U1/U2 failed`), uvcvideo
+  re-binds the camera, and in the same second the driver (a libusb client) gets `Device or resource busy` on every
+  endpoint and logs `uvc streamer watchdog triggered`; the kernel adds ~400 `usbfs: process ... did not claim interface 0`.
+  The camera never runtime-suspended, the link is USB 3.2, nothing is logged before the reset. A reset the host starts
+  by itself with no error before it points at the physical side (cable, connector, supply glitch while `persist` is on),
+  **not tested**: the one test left is another USB-C cable or port for the head camera.
+* **Recovery.** `dead_signature()` finds `uvc streamer watchdog triggered` after the line `RealSense Node Is Up` in
+  `run.log` (4 of 4 saved logs of runs that died: yes, always >= 2 lines, the first in the second of the kernel reset;
+  never before `Node Is Up`, where the deliberate `initial_reset` happens; none in a healthy run). The supervisor checks
+  it every 2 s, saves the dead run's log and restarts the driver **without waiting for SIGINT** (the `ros2 launch` process
+  ignores SIGINT because it is started with `&` from a non-interactive shell, `SigIgn` checked on the Jetson, so the 12 s wait
+  ended in SIGKILL every time and not only for a stuck driver as this page used to say; the camera node below it does get
+  the SIGINT in a normal `stop`). `start` waits for `Node Is Up` (~13 s) instead of a fixed 20 s, and `_restart` sleeps 2 s instead of 5.
+  Expected gap per death: about **20 s** (it was ~85 s: two failed frame checks 30 s apart).
+* **A second way to fail, seen twice on 2026-11-09:** after the node's own `Resetting device...` it never finds the camera
+  again although the kernel has already re-enumerated it (no `Node Is Up`, 0 frames; the first start after the boot
+  at 18:00, and the restart of my simulated-death test at 18:21). A new start works. The supervisor now tries again at once
+  when `Node Is Up` does not appear within the start's 24 s (up to 3 attempts, ~50 s worst case with one failed attempt).
+  What was tested: the detection of an injected "camera lost" line (restart began 1 s later); in that test the first
+  restart hung as described and the old 30 s frame check recovered it 142 s after the injection; the retry code was added
+  after that and **has not been through a failed attempt yet** (a simulation kills a healthy driver, which is not what a
+  real death looks like: wait for a real one and read the `supervise:` lines in `~/g1_realsense/boot.log`).
+* **For whoever consumes the head camera** (continuous use: navigation and manipulation): plan for a gap of **~20-60 s every
+  10-20 min** until the cause is found. Judge the picture by its header stamp (age), not by "the topic exists"; a policy or
+  a map builder should pause or fall back when the last frame is older than a few seconds, and carry on by itself when the
+  stream comes back (the topic names and the encoder node survive a restart; the encoder is stopped and started with the
+  driver). Do not use the head camera as the only obstacle sensor while walking.
+* The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
+  a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
 ## Not working / not done
 

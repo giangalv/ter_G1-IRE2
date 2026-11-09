@@ -7,7 +7,8 @@
 #   start [args]     run the driver in the background; args are `ros2 launch` args, they win over the defaults
 #   stop | status | log
 #   check            are depth frames really arriving (8 s)? exit 1 if not
-#   supervise        loop (what `boot` ends in): every ~30 s `check`, restart the driver after two failures; `stop` pauses it, `start` resumes
+#   supervise        loop (what `boot` ends in): every 2 s look for the driver's "camera lost" line and restart at once (camera back in ~20 s);
+#                    every ~30 s `check`, restart the driver after two failures; `stop` pauses it, `start` resumes
 #   stream [name=value ...]   show / change the parameters of the running stream encoder (JPEG colour, PNG depth) without a restart
 #   boot             what the @reboot cron entry runs: wait for the LAN address, then `start` and check that frames
 #                    arrive (`check`), up to 3 attempts
@@ -35,12 +36,24 @@ LOG=$WS/run.log
 CRON_TAG="# g1_realsense_autostart"
 DEFAULTS="initial_reset:=true enable_color:=true rgb_camera.profile:=640x360x15 enable_depth:=true depth_module.profile:=424x240x15 enable_gyro:=false enable_accel:=false"
 
+# Which RealSense stack the driver runs from. Without the file below: librealsense 2.50.0 (apt, ros-noetic-librealsense2) and
+# realsense-ros 4.0.4 in $WS. With "254" in it: librealsense 2.54.2 and realsense-ros 4.54.1 built in $W254 (side by side,
+# nothing of the old stack is touched). Set with `stack 254` / `stack old`, takes effect at the next driver start.
+STACK_FILE=$WS/stack
+W254=$HOME/g1_realsense_254
+new_stack() { [ "$(cat "$STACK_FILE" 2>/dev/null)" = 254 ] && [ -f "$W254/ws/install/setup.bash" ]; }
+
 env_setup() {
     set +u
     source /opt/ros/foxy/setup.bash
-    [ -f "$WS/install/setup.bash" ] && source "$WS/install/setup.bash"
+    if new_stack; then
+        source "$W254/ws/install/setup.bash"
+        export LD_LIBRARY_PATH=$(dirname "$(find "$W254/install_lrs" -name 'librealsense2.so' | head -1)"):${LD_LIBRARY_PATH:-}
+    else
+        [ -f "$WS/install/setup.bash" ] && source "$WS/install/setup.bash"
+        export LD_LIBRARY_PATH=/opt/ros/noetic/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH:-}
+    fi
     set -u
-    export LD_LIBRARY_PATH=/opt/ros/noetic/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH:-}
     export RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_DOMAIN_ID=$DOMAIN ROS_LOCALHOST_ONLY=0
     export FASTRTPS_DEFAULT_PROFILES_FILE=$WS/fastdds_lan.xml
 }
@@ -66,6 +79,12 @@ encoder_stop() {
     rm -f "$ENCODER_PID"
 }
 
+# The driver says it lost the camera in its own log: "uvc streamer watchdog triggered" (+ EBUSY on every endpoint) within a second of the
+# kernel's "usb 2-2.3: reset SuperSpeed Gen 1 USB device". Seen in all 4 saved logs of runs that died after "RealSense Node Is Up"
+# (2026-11-06, 2026-11-09), never before that line (initial_reset makes the camera re-enumerate during the start), never in a healthy run.
+# Much faster than counting frames (a check takes 8 s and two failed ones are needed): the supervisor looks for it every 2 s.
+dead_signature() { [ -f "$LOG" ] && awk '/RealSense Node Is Up/{up=1} up && /uvc streamer watchdog triggered/{found=1; exit} END{exit !found}' "$LOG"; }
+
 # A started driver can be alive and still dead on the USB side (2026-11-06, first start after a robot boot: "control_transfer
 # returned error" from the first second on, 0 frames for an hour, process running). So count depth frames for 8 s.
 streaming() {
@@ -88,8 +107,13 @@ PY
 
 do_stop() {
     if running; then
-        kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do running || break; sleep 1; done
+        # FAST_KILL=1 (the supervisor, camera already lost): skip the 12 s wait. The `ros2 launch` process, started with & from a
+        # non-interactive shell, ignores SIGINT (SigIgn mask checked 2026-11-09), so that wait always ended in SIGKILL anyway; the
+        # camera node below it does get the SIGINT and shuts the stream down, which is pointless once the camera is gone.
+        if [ -z "${FAST_KILL:-}" ]; then
+            kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do running || break; sleep 1; done
+        fi
         if running; then   # a driver stuck on the USB side ignores SIGINT
             echo "SIGINT ignored, killing"
             kill -KILL -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -KILL "$(cat "$PIDFILE")" 2>/dev/null
@@ -151,7 +175,13 @@ XML
     # shellcheck disable=SC2086
     setsid nohup ros2 launch realsense2_camera rs_launch.py $DEFAULTS "$@" > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
-    sleep 20   # initial_reset re-enumerates the camera first (~7 s)
+    # initial_reset re-enumerates the camera first (~7 s); the node is up ~13 s after the launch. Up to 24 s: a camera dead from the start never says it.
+    for _ in $(seq 1 48); do
+        running || break
+        grep -q "RealSense Node Is Up" "$LOG" 2>/dev/null && break
+        sleep 0.5
+    done
+    sleep 1
     encoder_start
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "DIED, see $LOG"; fi
     grep -E "Node Is Up|Device Name|USB type|Open profile|ERROR|died" "$LOG" | grep -v hwmon | cut -c1-200 | head -8
@@ -191,7 +221,7 @@ stop)
     do_stop
     ;;
 _restart)
-    do_stop; sleep 5; bash "$0" start
+    do_stop; sleep 2; bash "$0" start
     ;;
 supervise)
     # Keeps the driver streaming. 2026-11-06: the driver stayed alive with 0 frames several times (the USB side dead; cause
@@ -201,20 +231,41 @@ supervise)
         echo "already supervising (pid $(cat "$WS/supervise.pid"))"; exit 0
     fi
     echo $$ > "$WS/supervise.pid"
-    bad=0
+    # Two ways to notice a dead camera: the driver's own "streamer watchdog" line (looked for every 2 s, restart at once, no SIGINT wait:
+    # the camera is back ~20 s after it died, was ~85 s) and, as a fallback for a driver that is alive with 0 frames without that line
+    # (dead from the start, 2026-11-06), a frame count every ~30 s, restart after two failures.
+    bad=0; tick=0
+    save_log_and_restart() {
+        # A restart can fail by itself (2026-11-09: after the node's own "Resetting device..." it never found the camera again,
+        # although the kernel had re-enumerated it; at the next try it came up): when "Node Is Up" does not show within the start's
+        # 24 s, try again at once, up to 3 times, instead of waiting for two failed frame checks (~100 s).
+        for attempt in 1 2 3; do
+            # keep the log of the run that died (the restart overwrites run.log); the last 5 are kept
+            cp -f "$WS/run.log" "$WS/run.before-restart.$(date +%m%d-%H%M%S).log" 2>/dev/null
+            ls -t "$WS"/run.before-restart.*.log 2>/dev/null | tail -n +6 | xargs -r rm -f
+            if [ "$attempt" = 1 ]; then FAST_KILL=${1:-} bash "$0" _restart; else FAST_KILL=1 bash "$0" _restart; fi
+            grep -q "RealSense Node Is Up" "$LOG" 2>/dev/null && break
+            echo "$(date '+%F %T') supervise: attempt $attempt, the node did not come up"
+        done
+        bad=0; tick=0
+    }
     while true; do
-        sleep 30
-        [ -f "$WS/user_stop" ] && { bad=0; continue; }
+        sleep 2
+        [ -f "$WS/user_stop" ] && { bad=0; tick=0; continue; }
+        if running && dead_signature; then
+            echo "$(date '+%F %T') supervise: the driver reports the camera lost (uvc streamer watchdog), restarting the driver"
+            save_log_and_restart 1
+            continue
+        fi
+        tick=$((tick + 1))
+        [ $tick -lt 15 ] && continue
+        tick=0
         encoder_start
         if running && streaming > /dev/null 2>&1; then bad=0; continue; fi
         bad=$((bad + 1))
         [ $bad -lt 2 ] && continue
         echo "$(date '+%F %T') supervise: not streaming twice in a row (driver process $(running && echo alive || echo gone)), restarting the driver"
-        # keep the log of the run that died (the restart overwrites run.log); the last 5 are kept
-        cp -f "$WS/run.log" "$WS/run.before-restart.$(date +%m%d-%H%M%S).log" 2>/dev/null
-        ls -t "$WS"/run.before-restart.*.log 2>/dev/null | tail -n +6 | xargs -r rm -f
-        bash "$0" _restart
-        bad=0
+        save_log_and_restart
     done
     ;;
 stream)   # stream [name=value ...]: no arguments = show, else set (rates in Hz, JPEG quality 1-100, PNG level 0-9)
@@ -233,6 +284,16 @@ stream)   # stream [name=value ...]: no arguments = show, else set (rates in Hz,
         done
     fi
     ;;
+stack)    # stack [254|old]: show / choose the librealsense + wrapper pair (see STACK_FILE); restart the driver to apply
+    case "${2:-}" in
+    254) [ -f "$W254/ws/install/setup.bash" ] || { echo "the 2.54.2 stack is not built in $W254"; exit 1; }
+         echo 254 > "$STACK_FILE" ;;
+    old) rm -f "$STACK_FILE" ;;
+    "") ;;
+    *) echo "usage: $0 stack [254|old]"; exit 2 ;;
+    esac
+    if new_stack; then echo "stack: librealsense 2.54.2 + realsense-ros 4.54.1 ($W254)"; else echo "stack: librealsense 2.50.0 + realsense-ros 4.0.4 ($WS)"; fi
+    ;;
 status)
     if running; then echo "running (pid $(cat "$PIDFILE"), domain $DOMAIN)"; else echo "not running"; fi
     [ -f "$LOG" ] && grep -vE "^\s*$|control_transfer|hwmon" "$LOG" | tail -3 | cut -c1-200
@@ -241,6 +302,6 @@ log)
     tail -40 "$LOG" 2>/dev/null
     ;;
 *)
-    echo "usage: $0 build|start [launch args]|stop|status|check|supervise|log|boot|autostart-on|autostart-off|autostart-status"; exit 2
+    echo "usage: $0 build|start [launch args]|stop|status|check|supervise|log|stack [254|old]|boot|autostart-on|autostart-off|autostart-status"; exit 2
     ;;
 esac
