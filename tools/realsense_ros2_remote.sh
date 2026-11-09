@@ -172,8 +172,11 @@ start)
 XML
     env_setup
     cd "$WS" || exit 1
+    # $WS/extra_args (optional, one line of `name:=value` launch args) is added to every start, also the supervisor's restarts,
+    # which pass no args of their own. For experiments: delete the file to go back to the defaults.
+    EXTRA=$(cat "$WS/extra_args" 2>/dev/null || true)
     # shellcheck disable=SC2086
-    setsid nohup ros2 launch realsense2_camera rs_launch.py $DEFAULTS "$@" > "$LOG" 2>&1 < /dev/null &
+    setsid nohup ros2 launch realsense2_camera rs_launch.py $DEFAULTS $EXTRA "$@" > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
     # initial_reset re-enumerates the camera first (~7 s); the node is up ~13 s after the launch. Up to 24 s: a camera dead from the start never says it.
     for _ in $(seq 1 48); do

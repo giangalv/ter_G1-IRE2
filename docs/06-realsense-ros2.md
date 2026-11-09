@@ -169,6 +169,16 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   the installed library recommends (`D4XX_RECOMMENDED_FIRMWARE_VERSION "5.15.1.0"` in 2.54.2), so no mismatch; we already
   run 15 fps, 424x240 depth and 640x360 colour with `initial_reset`; `over_current_count` is 0 on every port of both hubs;
   `usbfs_memory_mb` is 16 (not changed: the failures start with a kernel reset, not with a buffer error).
+* **IR projector off: does not stop it (2026-11-09, 21:38-22:20 Jetson time).** The 2.54 launch file has no emitter
+  argument, so `depth_module.emitter_enabled: 0` goes in a yaml given as `config_file:=` (the node reported 0 afterwards).
+  To make that survive the supervisor's restarts, `start` adds the one line in `~/g1_realsense/extra_args`, if the file
+  exists, to the launch arguments (delete the file to go back to the defaults). Result: **2 deaths in 41 min** (21:56:07 and
+  22:12:45, 4 kernel resets), with the usual signature, so the projector's supply peak is not the trigger. The rate
+  (~1 per 20 min) lies inside the spread seen that day (2 deaths in the first 8 min after the 19:28 boot, none in the 23 min
+  after the 21:15 boot, projector on both times), so a smaller effect is neither shown nor excluded. In both deaths the first
+  restart did not come up (`attempt 1, the node did not come up`; at 21:56 attempts 1 and 2 both failed), like the 19:29:57 one,
+  so the second failure mode above is the usual case after a boot, not the exception; the exact length of those gaps was
+  not recorded (streaming again within 13 min and 7 min of the deaths, that is all the log says).
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
