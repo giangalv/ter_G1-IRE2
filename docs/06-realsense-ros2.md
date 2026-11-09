@@ -147,13 +147,28 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   when `Node Is Up` does not appear within the start's 24 s (up to 3 attempts, ~50 s worst case with one failed attempt).
   What was tested: the detection of an injected "camera lost" line (restart began 1 s later); in that test the first
   restart hung as described and the old 30 s frame check recovered it 142 s after the injection; the retry code was added
-  after that and **has not been through a failed attempt yet** (a simulation kills a healthy driver, which is not what a
-  real death looks like: wait for a real one and read the `supervise:` lines in `~/g1_realsense/boot.log`).
+  after that. **Real deaths afterwards (same day, Jetson time):** reset 18:33:51 -> supervisor 18:33:53 -> streaming again
+  18:34:11 (**20 s**); reset 18:36:04 -> supervisor 18:36:13 -> first restart never came up (`attempt 1, the node did not
+  come up`, 18:36:44) -> second attempt up 18:37:02 (**58 s** in all). So the retry path works in real life. Gaps between
+  deaths that day: 13.5, 10.6, 1.9 min, then more than 8 min.
 * **For whoever consumes the head camera** (continuous use: navigation and manipulation): plan for a gap of **~20-60 s every
   10-20 min** until the cause is found. Judge the picture by its header stamp (age), not by "the topic exists"; a policy or
   a map builder should pause or fall back when the last frame is older than a few seconds, and carry on by itself when the
   stream comes back (the topic names and the encoder node survive a restart; the encoder is stopped and started with the
   driver). Do not use the head camera as the only obstacle sensor while walking.
+* **What others report (searched 2026-11-09): same symptoms, no confirmed fix.** Orin NX + D435, JetPack 5.1.3, disconnects
+  after 10-15 h with `-32` / `-71`, `Disable of device-initiated U1/U2 failed`, fallback to USB 2.0, a second UVC device on
+  the same hub also hit; closed without an answer
+  ([NVIDIA forum](https://forums.developer.nvidia.com/t/realsense-d435-and-additional-uvc-device-usb-disconnections-on-jetson-orin-nx-three-scenarios-with-tegra-xusb-errors-emi-and-potential-hub-resets/342718)).
+  Orin NX 16 GB, JetPack R36.4.7, the same `uvc streamer watchdog triggered`: NVIDIA's advice was the firmware the library
+  recommends, no IR streams / pointcloud / align, 15 fps everywhere, and a larger USBFS memory buffer
+  ([Isaac ROS thread](https://forums.developer.nvidia.com/t/intel-realsense-d435-uvc-streamer-watchdog-errors-and-missing-intrinsics-with-isaac-ros-nvblox/365520)).
+  Xavier NX, same watchdog line: solved there by lowering both streams to 15 fps and `initial_reset`
+  ([realsense-ros #2149](https://github.com/IntelRealSense/realsense-ros/issues/2149)). A search hit on an AGX Xavier
+  thread says a PCIe-to-USB card solved it (only the snippet was read). **Checked here:** firmware 5.15.1.55 is the family
+  the installed library recommends (`D4XX_RECOMMENDED_FIRMWARE_VERSION "5.15.1.0"` in 2.54.2), so no mismatch; we already
+  run 15 fps, 424x240 depth and 640x360 colour with `initial_reset`; `over_current_count` is 0 on every port of both hubs;
+  `usbfs_memory_mb` is 16 (not changed: the failures start with a kernel reset, not with a buffer error).
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
