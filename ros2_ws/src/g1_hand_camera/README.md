@@ -33,7 +33,22 @@ False and the open is retried with exponential backoff (2 s → 30 s).
 | `calibration_left` / `calibration_right` | `""` | ROS `camera_calibration` YAML; ignored (with a warning) if its resolution differs from the stream |
 | `frame_id_left` / `frame_id_right` | `{side}_hand_camera` | |
 | `reconnect_initial_s` / `reconnect_max_s` | 2 / 30 | reconnect backoff |
+| `on_demand` | false | open a camera only while somebody subscribes to one of its topics (see below) |
+| `linger_s` | 3 | on demand: keep the camera open this long after the last subscriber left |
 | `mock` | false | synthetic frames, no camera and no OpenCV needed |
+
+### On demand
+
+The palm cameras are for moments (look at the object in the palm before a grasp, check a grasp), not for a continuous
+stream. With `on_demand:=true` a camera's device stays **closed** until a subscriber appears on its `image_raw`,
+`image_raw/compressed` or `camera_info`, and is closed again `linger_s` after the last one left. A closed camera
+costs no USB traffic and has nothing to reopen when the hub drops the palm cameras (they drop for 1-2 s when the
+head camera is restarted, `ter_G1-IRE2/docs/03`). `available` then means "the last open worked": closing on
+purpose leaves it True, a failed open or read sets it False. The first frame comes about a second after the first
+subscriber (poll 0.2 s, open, first read). Through `g1_unitree_bridge/hand_camera_relay` (lazy: it subscribes in the
+Jetson's domain only while somebody subscribes in the robot's domain, and lets go 5 s after the last one) the chain is:
+consumer on the laptop -> relay (up to 1 s) -> node opens the camera; an event-driven consumer subscribes when it needs
+a picture, takes the first frame and drops the subscription.
 
 If `mock` is false and OpenCV is missing, startup fails (CONVENTIONS.md mock rules).
 

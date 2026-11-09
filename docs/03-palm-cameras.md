@@ -92,6 +92,29 @@ crashes, so the node uses **domain 42** with Fast DDS on 192.168.123.164 and the
   `~/g1_hand_cameras/boot.log`. Tested without a reboot under `env -i`: both cameras available. Needs the package
   copied once by `install`.
 
+## On demand (2026-11-09)
+
+The palm cameras are for moments (look at what is in the palm before a grasp, check a grasp), not for a stream, while the
+head camera (06) is the one used continuously. Until now the node kept both devices open all the time: on 2026-11-09 it
+had read 17 000 / 21 000 frames in 26 minutes and published none (nobody subscribed), with the cameras streaming over
+USB for nothing. `hand_camera_node` now has `on_demand` (the Jetson launcher sets it, `start -p on_demand:=false` goes
+back): a camera is opened only while somebody subscribes to one of its topics and is closed 3 s (`linger_s`) after the
+last subscriber left. Measured on the robot with a subscriber on the Jetson: nothing holds `/dev/video6` or `/dev/video8`
+at rest; first JPEG **1.1 s** (left) / **1.4 s** (right) after subscribing, then 9.8 Hz; the device is closed again within
+4.5 s of unsubscribing; only the subscribed camera is opened.
+
+* Through the laptop relay the chain is: a node on the laptop subscribes -> `hand_camera_relay` (lazy, up to 1 s) subscribes
+  in the Jetson's domain -> the node opens the camera. The relay lets go 5 s after the last laptop subscriber, so a camera
+  is open for about 8 s after the last consumer left. An event-driven consumer subscribes when it needs a picture, takes
+  the first frame and drops the subscription. Not measured end to end through the relay (only on the Jetson).
+* `available` now means "the last open worked": closing on purpose does not clear it, a failed open or read does. It is
+  False from the node's start until the first open.
+* A closed camera does not care when the USB hub drops the palm cameras for 1-2 s (every head-camera restart, see above and
+  06). An open one still has to be reopened by the node's backoff (2 s -> 30 s).
+* The node (old always-open version and the new one) does not leave `rclpy.spin` on SIGINT: `hand_cameras_ros2.sh stop` said
+  "did not stop" every time (main thread in `futex_wait` 5 s after the signal, cause not found). `stop` now escalates
+  SIGINT -> SIGTERM -> SIGKILL (tested: stopped after SIGTERM).
+
 ## Not done yet
 
 * No intrinsic calibration; no camera-to-palm extrinsics.

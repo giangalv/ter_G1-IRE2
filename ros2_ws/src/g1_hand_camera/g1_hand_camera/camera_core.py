@@ -316,6 +316,25 @@ class RateLimiter:
         return False
 
 
+class DemandGate:
+    """Should an on-demand camera be open? Yes while somebody wants frames, and for ``linger_s`` after the last one.
+
+    The linger keeps a consumer that drops and re-subscribes (the laptop relay unsubscribes 5 s after its last
+    subscriber and a viewer may come back) from making the device close and open again each time.
+    """
+
+    def __init__(self, linger_s: float = 3.0) -> None:
+        self._linger = max(float(linger_s), 0.0)
+        self._until: Optional[float] = None
+
+    def wanted(self, now_s: float, demand: bool) -> bool:
+        """``demand``: at least one subscriber right now. Call it with the current monotonic time."""
+        if demand:
+            self._until = now_s + self._linger
+            return True
+        return self._until is not None and now_s < self._until
+
+
 # ---------------------------------------------------------------------------
 # Calibration
 # ---------------------------------------------------------------------------

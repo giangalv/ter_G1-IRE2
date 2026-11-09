@@ -15,6 +15,12 @@ somebody subscribes to it, so an idle node costs one USB read per frame.
 Hot-plug: when a camera cannot be opened or a read fails the worker marks the
 camera unavailable and retries with exponential backoff (2 s -> 30 s).
 
+On demand (``on_demand=True``): a camera is opened only while somebody subscribes to one of its topics and for
+``linger_s`` after the last subscriber is gone; otherwise the device stays closed (no USB traffic, nothing to
+reopen when the USB hub drops the cameras, e.g. while the head camera restarts). ``available`` then means "the
+last open worked": closing on purpose does not clear it, a failed open or read does. The first frame comes about
+a second after the first subscriber.
+
 Mock mode (``mock=True``): synthetic frames, no OpenCV and no device needed.
 If ``mock`` is False and OpenCV is missing, startup fails fatally
 (CONVENTIONS.md mock rules).
@@ -42,6 +48,7 @@ from g1_hand_camera.camera_core import (
     SIDES,
     CameraCalibration,
     CameraError,
+    DemandGate,
     MockFrameSource,
     OpenCvFrameSource,
     RateLimiter,
@@ -55,6 +62,7 @@ from g1_hand_camera.qos import LATCHED_QOS, SENSOR_QOS
 
 _STATS_PERIOD_S = 10.0
 _JOIN_TIMEOUT_S = 2.0
+_IDLE_POLL_S = 0.2  # on demand: how often a closed camera looks for subscribers
 
 
 @dataclass
@@ -76,6 +84,7 @@ class _CameraState:
     published: int = 0
     errors: int = 0
     limiter: Optional[RateLimiter] = None
+    gate: Optional[DemandGate] = None
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -101,6 +110,8 @@ class HandCameraNode(Node):
         self.declare_parameter("frame_id_right", "right_hand_camera")
         self.declare_parameter("reconnect_initial_s", 2.0)
         self.declare_parameter("reconnect_max_s", 30.0)
+        self.declare_parameter("on_demand", False)
+        self.declare_parameter("linger_s", 3.0)
         self.declare_parameter("mock", False)
 
         gp = self.get_parameter
@@ -114,6 +125,8 @@ class HandCameraNode(Node):
         self._jpeg_quality = int(gp("jpeg_quality").value)
         self._reconnect_initial_s = float(gp("reconnect_initial_s").value)
         self._reconnect_max_s = float(gp("reconnect_max_s").value)
+        self._on_demand = bool(gp("on_demand").value)
+        linger_s = float(gp("linger_s").value)
 
         if not self._mock and not HAS_CV2:
             self.get_logger().fatal(
@@ -139,6 +152,7 @@ class HandCameraNode(Node):
                 source=source,
                 calibration=calib,
                 limiter=RateLimiter(self._rate_hz),
+                gate=DemandGate(linger_s),
             )
             prefix = f"/g1/hand/{side}/camera"
             cam.raw_pub = self.create_publisher(Image, f"{prefix}/image_raw", SENSOR_QOS)
@@ -162,7 +176,9 @@ class HandCameraNode(Node):
         self._stats_timer = self.create_timer(_STATS_PERIOD_S, self._log_stats)
         self.get_logger().info(
             f"hand_camera_node up (mock={self._mock}, {self._width}x{self._height}"
-            f"@{self._fps:.0f}, publish {self._rate_hz:g} Hz): "
+            f"@{self._fps:.0f}, publish {self._rate_hz:g} Hz, "
+            + (f"on demand, linger {linger_s:g} s" if self._on_demand else "always open")
+            + "): "
             + ", ".join(f"{c.side}={c.device}" for c in self._cams.values())
         )
 
@@ -212,10 +228,22 @@ class HandCameraNode(Node):
     # Capture thread
     # ------------------------------------------------------------------
 
+    def _wanted(self, cam: _CameraState) -> bool:
+        """On demand: is somebody subscribed to this camera (or was somebody within the linger time)?"""
+        demand = (
+            cam.raw_pub.get_subscription_count() > 0
+            or cam.comp_pub.get_subscription_count() > 0
+            or cam.info_pub.get_subscription_count() > 0
+        )
+        return cam.gate.wanted(time.monotonic(), demand)
+
     def _capture_loop(self, cam: _CameraState) -> None:
         """Open / read / publish loop of one camera, with hot-plug retry."""
         backoff = ReconnectBackoff(self._reconnect_initial_s, self._reconnect_max_s)
         while self._running():
+            if self._on_demand and not self._wanted(cam):
+                self._stop.wait(_IDLE_POLL_S)  # closed: nobody listens
+                continue
             try:
                 cam.source.open()
             except CameraError as exc:
@@ -238,7 +266,11 @@ class HandCameraNode(Node):
                 )
             self._set_available(cam, True)
 
+            closed_on_purpose = False
             while self._running():
+                if self._on_demand and not self._wanted(cam):
+                    closed_on_purpose = True
+                    break
                 try:
                     rgb = cam.source.read()
                 except CameraError as exc:
@@ -254,6 +286,8 @@ class HandCameraNode(Node):
                         f"{cam.side}: publish failed: {exc}", throttle_duration_sec=5.0
                     )
             cam.source.close()
+            if closed_on_purpose:
+                continue  # nothing is wrong with the camera, it just has no audience
             self._set_available(cam, False)
             self._stop.wait(backoff.next_delay())
         cam.source.close()

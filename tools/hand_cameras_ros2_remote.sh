@@ -19,7 +19,10 @@ DOMAIN=42
 JETSON_IP=192.168.123.164
 PIDFILE=$WS/run.pid
 LOG=$WS/run.log
-PARAMS="-p publish_raw:=false -p publish_compressed:=true -p publish_rate_hz:=10.0 -p jpeg_quality:=80"
+# on_demand: a palm camera is opened only while somebody subscribes to it (the laptop relay subscribes only while a laptop
+# node does), closed 3 s after the last subscriber. The palm cameras are for moments, not for a stream; a closed one also
+# has nothing to reopen when the hub drops them. `start -p on_demand:=false` gives the old always-open behaviour.
+PARAMS="-p publish_raw:=false -p publish_compressed:=true -p publish_rate_hz:=10.0 -p jpeg_quality:=80 -p on_demand:=true -p linger_s:=3.0"
 
 env_setup() {
     set +u
@@ -69,8 +72,14 @@ XML
     ;;
 stop)
     if running; then
-        kill -INT -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -INT "$(cat "$PIDFILE")"
-        for _ in 1 2 3 4 5 6 7 8; do running || break; sleep 1; done
+        # the node does not leave rclpy.spin on SIGINT (seen 2026-11-09, also with the previous always-open version, 5 s and more
+        # after the signal, main thread in futex_wait): SIGINT first, then SIGTERM, then SIGKILL. It holds no state to save.
+        for sig in INT TERM KILL; do
+            kill -"$sig" -- "-$(cat "$PIDFILE")" 2>/dev/null || kill -"$sig" "$(cat "$PIDFILE")" 2>/dev/null
+            for _ in 1 2 3 4 5; do running || break; sleep 1; done
+            running || break
+            [ "$sig" = KILL ] || echo "still running after SIG$sig"
+        done
         running && { echo "did not stop: pid $(cat "$PIDFILE")"; exit 1; }
         echo "stopped"
     else

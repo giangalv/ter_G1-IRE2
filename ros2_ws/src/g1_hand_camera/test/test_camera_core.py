@@ -201,6 +201,37 @@ def test_rate_limiter_does_not_burst_after_a_stall():
     assert r.should_publish(5.11)
 
 
+def test_demand_gate_is_closed_until_somebody_asks():
+    g = cc.DemandGate(3.0)
+    assert not g.wanted(0.0, False)
+    assert not g.wanted(100.0, False)
+
+
+def test_demand_gate_stays_open_for_the_linger_after_the_last_subscriber():
+    g = cc.DemandGate(3.0)
+    assert g.wanted(10.0, True)
+    assert g.wanted(10.5, False)
+    assert g.wanted(12.9, False)
+    assert not g.wanted(13.0, False)
+    assert not g.wanted(20.0, False)
+
+
+def test_demand_gate_a_returning_subscriber_restarts_the_linger():
+    g = cc.DemandGate(3.0)
+    assert g.wanted(0.0, True)
+    assert g.wanted(2.0, False)
+    assert g.wanted(2.5, True)  # back before the linger ended
+    assert g.wanted(5.0, False)  # 2.5 + 3 = 5.5
+    assert not g.wanted(5.5, False)
+
+
+def test_demand_gate_without_linger_closes_at_once():
+    g = cc.DemandGate(0.0)
+    assert g.wanted(1.0, True)
+    assert not g.wanted(1.0, False)
+    assert not g.wanted(1.1, False)
+
+
 # --------------------------------------------------------------------------
 # Calibration
 # --------------------------------------------------------------------------
