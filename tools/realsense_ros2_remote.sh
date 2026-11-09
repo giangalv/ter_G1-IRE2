@@ -224,7 +224,9 @@ stop)
     do_stop
     ;;
 _restart)
-    do_stop; sleep 2; bash "$0" start
+    # RESTART_PAUSE: seconds between the end of the old driver and the start of the new one. 8 s was tried on 2026-11-09 (first restart
+    # after a camera loss stalling at "Resetting device...": 1 of 2 failed with 8 s, 4 of 5 with 2 s): no clear gain, back to 2 s (docs/06).
+    do_stop; sleep "${RESTART_PAUSE:-2}"; bash "$0" start
     ;;
 supervise)
     # Keeps the driver streaming. 2026-11-06: the driver stayed alive with 0 frames several times (the USB side dead; cause

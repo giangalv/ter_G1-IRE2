@@ -179,6 +179,18 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   restart did not come up (`attempt 1, the node did not come up`; at 21:56 attempts 1 and 2 both failed), like the 19:29:57 one,
   so the second failure mode above is the usual case after a boot, not the exception; the exact length of those gaps was
   not recorded (streaming again within 13 min and 7 min of the deaths, that is all the log says).
+* **Longer restart pause: no clear gain (2026-11-09, 22:48-23:29 Jetson time).** `_restart` waited 2 s between the end of the old
+  driver and the next start; with 8 s (`RESTART_PAUSE`, default back at 2) there were 2 deaths and the first restart failed
+  once of twice (4 of 5 before). The failed attempts all stop at the same line, `Resetting device...` (the driver's own
+  `initial_reset`), 1328 bytes of log each, and the same stall also happens at the first start after a boot, 20 s after the
+  hub settled, so waiting longer is unlikely to be the cure. Untried: `initial_reset:=false` on restarts that follow a death
+  (the kernel has just reset the camera).
+* **U1/U2 link power states off: not the fix (2026-11-09, 23:30-00:44).** The camera's port allowed both
+  (`2-2:1.0/2-2-port3/usb3_lpm_permit = u1_u2`, camera `usb3_hardware_lpm_u1 = enabled`); `0` written there with `sudo`
+  (kernel setting, not persistent, back after a reboot) and the driver restarted: camera at 5000 Mbit/s with u1 and u2
+  disabled, **no death for 56 min, then two within a minute (00:27:06 and 00:27:56)**. The deaths come in groups (that evening:
+  19:29, 19:33; 21:56, 22:12, 22:26; 22:50, 23:10; 00:27 twice) with quiet stretches of 23-77 min in between, so one 40-min
+  window proves little either way. Not shown: that U1/U2 change nothing at all.
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
