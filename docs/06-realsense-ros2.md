@@ -191,6 +191,18 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   disabled, **no death for 56 min, then two within a minute (00:27:06 and 00:27:56)**. The deaths come in groups (that evening:
   19:29, 19:33; 21:56, 22:12, 22:26; 22:50, 23:10; 00:27 twice) with quiet stretches of 23-77 min in between, so one 40-min
   window proves little either way. Not shown: that U1/U2 change nothing at all.
+* **It is the camera unit, not the Jetson, the cable, the port or the firmware (2026-11-10).** The user's second D435i (serial
+  239722070946, firmware 5.17.3.10, used before on another Jetson) was put on the robot's own cable at the camera end
+  (same USB-C cable, port `2-2.3`, hub, boot, defaults of this page): **89.5 min with no death and no kernel reset**
+  (17:02-18:31 Jetson time). The robot's camera (254322070410, firmware 5.15.1.55) put back on the same cable died after
+  37.6 min (19:37:33); then it was updated with `rs-fw-update -b backup.bin -f D4XX_FW_Image-5.17.3.10.bin -s 254322070410`
+  (image from `https://librealsense.intel.com/Releases/RS4xx/FW/`, MD5 6300782761d2f838db3430444407e811; the update
+  said "successfully updated", USB `bcdDevice` went from 0x50f1 to 0x5113, as in the spare) and **died again 2 min 22 s
+  after the stream came up** (20:10:37). So the same firmware is stable in one unit and not in the other. Ruled out
+  that evening, each without a clear effect: IR projector off (2 deaths in 41 min), restart pause 8 s, U1/U2 link power
+  states off (56 quiet min, then 2 deaths in a minute). Practical consequence: use a unit that holds (the spare) and keep the
+  old one aside; test the old one on another host before calling it defective. The old firmware backup is 2 097 152 bytes
+  (MD5 4313c0e0371e1bdfdd5dca373e5357e3).
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
