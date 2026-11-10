@@ -213,6 +213,17 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   the ROS driver; uvcvideo found the camera again but `Failed to set UVC probe control: -32` and `/dev/video0` did not come
   back (interfaces 1 and 2 without a driver) until the RealSense driver was started again (3 attempts, about 3 min). So
   the link of the head camera assembly (unit or its cable) resets by itself whatever program reads it.
+* **USB 2.0 for the camera: about 60 clean minutes so far (2026-11-10, 22:15-23:16 Jetson time), not finished.** Forcing it: with
+  `sudo`, a USB 3 hub class request, SetPortFeature(PORT_LINK_STATE = SS.Disabled) on port 3 of the SuperSpeed side of the
+  Realtek hub (`2-2`); the camera re-enumerates by itself on the USB 2.0 side of the same connector (`1-2.3`, 480 Mbit/s,
+  no netdev behind that port, so none of the trouble of cutting the palm box's power); `enable` or a reboot restores
+  SuperSpeed (not persistent). **The ROS driver does not run on that link**: after its own `initial_reset` the node never finds the camera
+  again, with `initial_reset:=false` the depth start fails (`Depth stream start failure`, `control_transfer returned error ...
+  Resource temporarily unavailable`), 424x240 depth and 640x360 colour are `invalid` and 480x270 does not resolve. **The kernel
+  `uvcvideo` path does**: depth Z16 640x480@15 and colour YUYV 640x480@15 together, 150 frames per 10 s each, 45 min and then 14 min
+  with no error, no reset, no disconnect (until a battery change cut the power), against a drop after 14 min 40 s with the same
+  reader in SuperSpeed. The camera had quiet stretches of up to 77 min before, so a 90-120 min run is still needed.
+  If it holds, the camera would need a node that reads it through V4L2 (the ROS driver cannot be used on USB 2.0).
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
