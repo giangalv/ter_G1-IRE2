@@ -191,10 +191,13 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   disabled, **no death for 56 min, then two within a minute (00:27:06 and 00:27:56)**. The deaths come in groups (that evening:
   19:29, 19:33; 21:56, 22:12, 22:26; 22:50, 23:10; 00:27 twice) with quiet stretches of 23-77 min in between, so one 40-min
   window proves little either way. Not shown: that U1/U2 change nothing at all.
-* **It is the camera unit, not the Jetson, the cable, the port or the firmware (2026-11-10).** The user's second D435i (serial
+* **It is the head camera assembly (the unit and the cable built into the head), not the Jetson, its hub port or the firmware (2026-11-10).**
+  The user's second D435i (serial
   239722070946, firmware 5.17.3.10, used before on another Jetson) was put on the robot's own cable at the camera end
-  (same USB-C cable, port `2-2.3`, hub, boot, defaults of this page): **89.5 min with no death and no kernel reset**
-  (17:02-18:31 Jetson time). The robot's camera (254322070410, firmware 5.15.1.55) put back on the same cable died after
+  (its own external cable, plugged where the head camera's cable normally goes: same hub port `2-2.3`, hub, boot, defaults of this page;
+  **the head camera is built into the head with its own cable, so the cable was NOT the same**: the test separates the Jetson side from
+  the head assembly, not the camera from its cable): **89.5 min with no death and no kernel reset**
+  (17:02-18:31 Jetson time). The robot's camera (254322070410, firmware 5.15.1.55) put back on its own cable died after
   37.6 min (19:37:33); then it was updated with `rs-fw-update -b backup.bin -f D4XX_FW_Image-5.17.3.10.bin -s 254322070410`
   (image from `https://librealsense.intel.com/Releases/RS4xx/FW/`, MD5 6300782761d2f838db3430444407e811; the update
   said "successfully updated", USB `bcdDevice` went from 0x50f1 to 0x5113, as in the spare) and **died again 2 min 22 s
@@ -209,7 +212,7 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   Set SEL of device-initiated U1/U2 failed` and `usb 2-2.3: reset SuperSpeed Gen 1 USB device`, the same signature as with
   the ROS driver; uvcvideo found the camera again but `Failed to set UVC probe control: -32` and `/dev/video0` did not come
   back (interfaces 1 and 2 without a driver) until the RealSense driver was started again (3 attempts, about 3 min). So
-  the link of this camera unit resets by itself whatever program reads it.
+  the link of the head camera assembly (unit or its cable) resets by itself whatever program reads it.
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
