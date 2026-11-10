@@ -202,7 +202,14 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   that evening, each without a clear effect: IR projector off (2 deaths in 41 min), restart pause 8 s, U1/U2 link power
   states off (56 quiet min, then 2 deaths in a minute). Practical consequence: use a unit that holds (the spare) and keep the
   old one aside; test the old one on another host before calling it defective. The old firmware backup is 2 097 152 bytes
-  (MD5 4313c0e0371e1bdfdd5dca373e5357e3).
+  (MD5 4313c0e0371e1bdfdd5dca373e5357e3). After a clean Jetson reboot with the new firmware it died at 18.6 min and again 4 min later.
+* **Not librealsense either (2026-11-10, 21:02-21:17 Jetson time).** With the RealSense driver stopped, a small reader
+  went through the kernel `uvcvideo` driver only: depth Z16 424x240@15 by raw V4L2 ioctls, colour YUYV 640x360@15 by OpenCV
+  (OpenCV does not know Z16), 150 frames per 10 s each, no error. After **14 min 40 s** the kernel logged `Disable /
+  Set SEL of device-initiated U1/U2 failed` and `usb 2-2.3: reset SuperSpeed Gen 1 USB device`, the same signature as with
+  the ROS driver; uvcvideo found the camera again but `Failed to set UVC probe control: -32` and `/dev/video0` did not come
+  back (interfaces 1 and 2 without a driver) until the RealSense driver was started again (3 attempts, about 3 min). So
+  the link of this camera unit resets by itself whatever program reads it.
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
