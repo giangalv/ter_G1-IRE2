@@ -228,6 +228,15 @@ The camera stops delivering frames every 10-20 minutes. **The cause is not fixed
   that can stand the 2.1 link: a librealsense built on the V4L2 backend instead of RSUSB (it is `FORCE_RSUSB_BACKEND=ON`
   today), or a V4L2 node that publishes the images itself (then the depth/colour intrinsics, the depth-to-colour
   extrinsics and the alignment, which librealsense gives for free, have to be supplied).
+* **The ROS driver does run on USB 2.0 with librealsense 2.54.2 built on the V4L2 backend** (`tools/realsense_build_254_v4l2.sh`,
+  8 min on the Jetson; the wrapper is not rebuilt, `lrs_backend` = `v4l2` in `~/g1_realsense` makes `env_setup` point
+  `LD_LIBRARY_PATH` at `install_lrs_v4l2`). Launch args: `initial_reset:=false depth_module.profile:=640x480x15
+  rgb_camera.profile:=640x480x15` (`extra_args`). Two things it needs: (1) big UDP receive buffers, `net.core.rmem_max` and
+  `rmem_default` 25 MB (default 212992 lost ~1/3 of the 640x480 images between the driver and the readers on the Jetson,
+  `RcvbufErrors` +500/s; with 25 MB 15 Hz on both streams and no loss); (2) a supervisor that watches both streams: after
+  an isochronous error (`uvcvideo: Non-zero status (-75)`, every 10-40 min) the colour stream stalled once while depth kept
+  going (`Frames didn't arrived within 5 seconds`), so `dead_signature` matches that line and `streaming()` counts depth and
+  colour. Held 1 h 38 min, then a 44 min window with no restart; not yet permanent at boot (USB 2.0 link, sysctl).
 * The palm cameras are no longer affected by those restarts in the normal case: they are opened only on demand (03), so
   a closed palm camera has nothing to lose when the USB hub drops them while the head camera restarts.
 
