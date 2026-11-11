@@ -87,10 +87,15 @@ encoder_stop() {
 # kernel's "usb 2-2.3: reset SuperSpeed Gen 1 USB device". Seen in all 4 saved logs of runs that died after "RealSense Node Is Up"
 # (2026-11-06, 2026-11-09), never before that line (initial_reset makes the camera re-enumerate during the start), never in a healthy run.
 # Much faster than counting frames (a check takes 8 s and two failed ones are needed): the supervisor looks for it every 2 s.
-dead_signature() { [ -f "$LOG" ] && awk '/RealSense Node Is Up/{up=1} up && /uvc streamer watchdog triggered/{found=1; exit} END{exit !found}' "$LOG"; }
+# The V4L2 backend (lrs_backend=v4l2, camera on USB 2.0) has its own: after an isochronous error in the kernel ("uvcvideo: Non-zero status
+# (-75) in video completion handler", every 10-40 min) one stream can stay silent while the other goes on (2026-11-12: colour dead, depth
+# 15 Hz, the process alive); the driver then repeats "Frames didn't arrived within 5 seconds" every 5 s.
+dead_signature() { [ -f "$LOG" ] && awk '/RealSense Node Is Up/{up=1} up && /uvc streamer watchdog triggered|Frames didn.t arrived within 5 seconds/{found=1; exit} END{exit !found}' "$LOG"; }
 
 # A started driver can be alive and still dead on the USB side (2026-11-06, first start after a robot boot: "control_transfer
-# returned error" from the first second on, 0 frames for an hour, process running). So count depth frames for 8 s.
+# returned error" from the first second on, 0 frames for an hour, process running). So count the depth frames for 8 s, and the colour
+# ones too when the driver publishes them (one stream can die alone, see dead_signature). The 640x480 images need big UDP receive
+# buffers (net.core.rmem_max/rmem_default 25 MB, docs/06), else this check misses frames that the camera did produce.
 streaming() {
     env_setup
     python3 - <<'PY'
@@ -99,13 +104,20 @@ from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 rclpy.init()
 node = rclpy.create_node("g1_rs_streaming_check")
-count = [0]
-node.create_subscription(Image, "/camera/depth/image_rect_raw", lambda m: count.__setitem__(0, count[0] + 1), qos_profile_sensor_data)
+topics = {"depth": "/camera/depth/image_rect_raw", "color": "/camera/color/image_raw"}
+count = {k: 0 for k in topics}
+def counter(k):
+    return lambda m: count.__setitem__(k, count[k] + 1)
+for k, t in topics.items():
+    node.create_subscription(Image, t, counter(k), qos_profile_sensor_data)
 t0 = time.time()
 while time.time() - t0 < 8:
     rclpy.spin_once(node, timeout_sec=0.2)
-print(f"depth frames in 8 s: {count[0]}")
-sys.exit(0 if count[0] >= 20 else 1)
+ok = count["depth"] >= 20
+if node.count_publishers(topics["color"]) > 0:   # colour disabled in the launch args: no publisher, not checked
+    ok = ok and count["color"] >= 20
+print(f"frames in 8 s: depth {count['depth']}, color {count['color']}")
+sys.exit(0 if ok else 1)
 PY
 }
 
@@ -262,7 +274,7 @@ supervise)
         sleep 2
         [ -f "$WS/user_stop" ] && { bad=0; tick=0; continue; }
         if running && dead_signature; then
-            echo "$(date '+%F %T') supervise: the driver reports the camera lost (uvc streamer watchdog), restarting the driver"
+            echo "$(date '+%F %T') supervise: the driver reports the camera lost (uvc streamer watchdog or frames timeout), restarting the driver"
             save_log_and_restart 1
             continue
         fi
