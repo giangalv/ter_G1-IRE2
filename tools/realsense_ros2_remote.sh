@@ -48,7 +48,11 @@ env_setup() {
     source /opt/ros/foxy/setup.bash
     if new_stack; then
         source "$W254/ws/install/setup.bash"
-        export LD_LIBRARY_PATH=$(dirname "$(find "$W254/install_lrs" -name 'librealsense2.so' | head -1)"):${LD_LIBRARY_PATH:-}
+        # "v4l2" in $WS/lrs_backend: librealsense 2.54.2 on the kernel V4L2 backend (install_lrs_v4l2, built by
+        # realsense_build_254_v4l2.sh) instead of RSUSB; the wrapper is not rebuilt, LD_LIBRARY_PATH picks the library
+        LRS=install_lrs
+        [ "$(cat "$WS/lrs_backend" 2>/dev/null)" = v4l2 ] && [ -d "$W254/install_lrs_v4l2" ] && LRS=install_lrs_v4l2
+        export LD_LIBRARY_PATH=$(dirname "$(find "$W254/$LRS" -name 'librealsense2.so' | head -1)"):${LD_LIBRARY_PATH:-}
     else
         [ -f "$WS/install/setup.bash" ] && source "$WS/install/setup.bash"
         export LD_LIBRARY_PATH=/opt/ros/noetic/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH:-}
