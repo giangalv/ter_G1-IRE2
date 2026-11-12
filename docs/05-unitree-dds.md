@@ -18,6 +18,9 @@ This is the robot's own stack, independent of the hand protocol.
 | `/unitree/slam_mapping/points`, `/unitree/slam_relocation/points` | `sensor_msgs/PointCloud2` | only while Unitree's SLAM runs; no publisher at the time |
 | `/utlidar/range_info` | `geometry_msgs/PointStamped` | no publisher at the time |
 
+The locomotion service `/api/sport` (FSM id, velocity), the remote's keys in
+`/lf/lowstate.wireless_remote` and the FSM states they reach are in [08](08-motion-and-remote.md).
+
 Nothing in this namespace carries the Inspire hands: they are reached directly
 over Modbus TCP ([02](02-inspire-rh56e2-hands.md)).
 

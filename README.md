@@ -17,6 +17,7 @@ all of it from a laptop. Everything here was measured on the real robot
 | [docs/05-unitree-dds.md](docs/05-unitree-dds.md) | Native Unitree topics seen over DDS (arms, hands, SLAM API) |
 | [docs/06-realsense-ros2.md](docs/06-realsense-ros2.md) | D435i depth + colour as ROS 2 topics: driver built on the Jetson, why it needs its own DDS domain, why the app video stops |
 | [docs/07-wifi.md](docs/07-wifi.md) | The robot's own access point (random name at every boot), what a Wi-Fi client reaches, how DDS domain 0 works over it (discovery relay on the Jetson, `tools/g1_wifi.sh`), measured rates per viz profile. |
+| [docs/08-motion-and-remote.md](docs/08-motion-and-remote.md) | **FSM states** (zero torque, damping, locked stand, **regular mode 501 = R1+Y**, running mode 802), the remote's keys that reach the robot, `/api/sport` requests and what each did (`tools/sport_call.py`, `tools/remote_events.py`) |
 | [ros2_ws/](ros2_ws/README.md) | **RViz2 of the real robot from a laptop, over the cable or the robot's Wi-Fi**: a ready ROS 2 Humble workspace (`bash ros2_ws/setup.sh`, then `viz_real.sh cable` / `wifi`) with the joints, hands + tactile, LiDAR, head and palm cameras |
 | [tools/](tools/README.md) | Small scripts used to find all of the above |
 

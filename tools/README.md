@@ -1,7 +1,8 @@
 # tools/
 
 Small scripts used to map the robot. Python 3, standard library + `numpy`
-(+ `rclpy` and the `unitree_api` messages for `slam_call.py`). Run them with
+(+ `rclpy` and the `unitree_api` / `unitree_hg` messages for `slam_call.py`, `sport_call.py` and `remote_events.py`, which are run
+**without** `-I` so the ROS environment is found). Run them with
 `python3 -I` where it says so, so the current directory cannot shadow modules.
 
 | Script | What it does | Writes to the robot? |
@@ -12,6 +13,8 @@ Small scripts used to map the robot. Python 3, standard library + `numpy`
 | `cam_cover_test.py LEAD CYCLES` | Left/right test for the palm cameras: streams thumbnails from the Jetson over SSH while the laptop beeps; needs `G1_PW`, `play` (sox) and `askpass.sh` | no (opens the two video nodes) |
 | `lidar_listen.py [SECONDS]` | Subscribes to `/utlidar/*_livox_mid360`, prints rates, cloud layout and valid-point stats, saves one cloud to `lidar_cloud.npz` | no |
 | `slam_call.py API_ID 'JSON'` | Sends **one** `unitree_api` request to `/api/slam_operate`; `--dry` only checks that someone listens | **yes** (one SLAM request) |
+| `sport_call.py get\|watch SECONDS\|fsm 1\|4\|501\|damp\|stop\|vel VX VY W DURATION` | ONE request to the locomotion service `/api/sport` (docs/08): `get` reads FSM id/mode/stand height (7001/7002/7005), `watch` prints FSM changes, `fsm` sets the FSM id (only 1, 4 and 501; **never 500** on this 29-motor robot), `damp` = `fsm 1`, `stop` = velocity 0, `vel` = velocity capped at 0.2 / 0.1 m/s, 0.3 rad/s, ≤ 1 s. Everything but `get`/`watch` is refused unless `G1_ALLOW_MOTION=1`; aborts without sending if nobody answers; prints each round-trip time | **yes** (FSM id or velocity, only with `G1_ALLOW_MOTION=1`; `get`/`watch` are queries) |
+| `remote_events.py [SECONDS] [--quiet]` | Passive event stream for a session with the Unitree remote: the keys that reach the robot (decoded from `/lf/lowstate.wireless_remote`), FSM id changes, and (without `--quiet`) stick use and leg bursts; sends nothing | no |
 | `g1_service.py list\|on NAME\|off NAME` | Lists / switches the robot's services (the app's Service Status page, e.g. `lidar_driver`) with ONE `unitree_api` request to `/api/robot_state/request` (api 1003 list, 1001 switch); `--dry` only checks that someone listens; `off` refuses safety services | **yes** (`on`/`off`; `list` is a query) |
 | `g1_up.sh` | After every robot boot: waits for the service manager, switches `lidar_driver` on if it is off and starts the RealSense driver if it is not running (`G1_PW` = Jetson password, `G1_CAMERA=false` for LiDAR only); idempotent | **yes** (one service switch, the Jetson driver) |
 | `tactile_session.py HOST SECS LABEL...` | Voice-guided press test: a 2 s baseline, then for every LABEL it speaks the cue (Italian, `spd-say`), beeps (`play`/sox), records `SECS` and prints the regions that rose above the baseline, with the peak cell | no |
