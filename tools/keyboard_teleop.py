@@ -4,7 +4,7 @@
 Run it in a real terminal (it reads single keys, so it cannot run from a pipe):
 
     source tools/g1_env.sh cable            # or wifi, see docs/08
-    G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py [--dry] [--vx 0.2] [--vy 0.1] [--w 0.3] [--hold 0.2]
+    G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py [--dry] [--vx 0.2] [--vy 0.1] [--w 0.3] [--hold 0.2] [--first-hold 0.6]
 
 Keys:
     r        ARM (it starts disarmed: nothing is sent until you press r)
@@ -15,9 +15,12 @@ Keys:
     x        DAMP (SetFsmId 1): the robot goes limp at once. The software emergency stop.
     Ctrl-C   zero velocity and quit (the robot stays standing in regular mode)
 
-Dead-man: a motion key acts only while the terminal keeps repeating it (--hold seconds after the last key event, default
-0.2 s). A tap is a short step, a held key walks. Every request carries its own 0.3 s duration, so if this program, the
-cable or the Wi-Fi dies the robot stops by itself within 0.3 s.
+Dead-man: a motion key acts only while the terminal keeps repeating it. After the FIRST press of a key the command lasts
+--first-hold seconds (default 0.6: it bridges the terminal's key-repeat delay of about 0.5 s, and the gait needs a
+command of about a second to start, measured in docs/08); once the repeats arrive each one keeps it alive only --hold
+seconds (default 0.2), so on release the robot stops within 0.2 s. A single tap is therefore a 0.6 s command. Every
+request carries its own 0.3 s duration, so if this program, the cable or the Wi-Fi dies the robot stops by itself
+within 0.3 s.
 
 Nothing is sent, and you cannot arm, unless ALL of these hold: FSM id = 501 (regular mode, answered by the robot, not
 older than 2 s), /lf/lowstate arrives (not older than 0.5 s), |roll| and |pitch| < 0.35 rad. A guard that trips disarms
@@ -48,6 +51,7 @@ MOVE_FSM = 501                 # regular mode of the 29-motor G1 (docs/08)
 DEFAULT_CAPS = (0.2, 0.1, 0.3)  # m/s forward, m/s sideways, rad/s
 HARD_CAPS = (0.4, 0.2, 0.6)
 SEND_PERIOD = 0.1              # s between velocity requests while a key is held
+REPEAT_GAP = 0.15              # s: the same key again within this gap counts as the terminal's key repeat
 CMD_DURATION = 0.3             # s, the robot's own timeout of every velocity request
 FSM_STALE_S, LOW_STALE_S, TILT_LIMIT = 2.0, 0.5, 0.35
 SPEED = {"1": 0.25, "2": 0.5, "3": 1.0}
@@ -161,11 +165,12 @@ def draw(node, armed, want, level, now):
     sys.stdout.flush()
 
 
-def loop(node, caps, hold, fd):
+def loop(node, caps, hold, first_hold, fd):
     level, armed, moving = "2", False, False
     want = (0.0, 0.0, 0.0)
     hold_until = last_send = last_poll = last_draw = last_damp = 0.0
     damp_tries = 0
+    last_key, last_key_t = None, 0.0
 
     def stop_if_walking():
         if node.vel_sent and node.fsm == MOVE_FSM:
@@ -202,7 +207,9 @@ def loop(node, caps, hold, fd):
                 elif ch in MOVES and armed:
                     k = SPEED[level]
                     want = tuple(m * c * k for m, c in zip(MOVES[ch], caps))
-                    hold_until = now + hold
+                    repeating = ch == last_key and now - last_key_t < REPEAT_GAP
+                    hold_until = now + (hold if repeating else first_hold)
+                    last_key, last_key_t = ch, now
         now = time.monotonic()
         if now - last_poll >= (0.2 if damp_tries else 0.5):
             node.poll_fsm()
@@ -239,12 +246,13 @@ def main():
     ap.add_argument("--vx", type=float, default=DEFAULT_CAPS[0], help="forward/back cap, m/s (hard max 0.4)")
     ap.add_argument("--vy", type=float, default=DEFAULT_CAPS[1], help="sideways cap, m/s (hard max 0.2)")
     ap.add_argument("--w", type=float, default=DEFAULT_CAPS[2], help="turning cap, rad/s (hard max 0.6)")
-    ap.add_argument("--hold", type=float, default=0.2, help="seconds a key press keeps the command alive (0.05-0.8)")
+    ap.add_argument("--hold", type=float, default=0.2, help="seconds each key REPEAT keeps the command alive (0.05-0.8)")
+    ap.add_argument("--first-hold", type=float, default=0.6, help="seconds the FIRST press of a key keeps it alive (0.05-0.8)")
     ap.add_argument("--dry", action="store_true", help="show everything, send only the FSM poll (7001)")
     args = ap.parse_args()
     caps = (args.vx, args.vy, args.w)
-    if any(not 0 < c <= h for c, h in zip(caps, HARD_CAPS)) or not 0.05 <= args.hold <= 0.8:
-        sys.exit(f"caps must be in (0, {HARD_CAPS}] and --hold in 0.05..0.8")
+    if any(not 0 < c <= h for c, h in zip(caps, HARD_CAPS)) or not 0.05 <= args.hold <= 0.8 or not 0.05 <= args.first_hold <= 0.8:
+        sys.exit(f"caps must be in (0, {HARD_CAPS}] and --hold / --first-hold in 0.05..0.8")
     if not args.dry and os.environ.get("G1_ALLOW_MOTION") != "1":
         sys.exit("this can move the robot: refused (set G1_ALLOW_MOTION=1, or use --dry)")
     if not sys.stdin.isatty():
@@ -275,7 +283,7 @@ def main():
     print(__doc__.split("Keys:")[1].split("Dead-man")[0].rstrip() + "\n")
     try:
         tty.setcbreak(fd)
-        loop(node, caps, args.hold, fd)
+        loop(node, caps, args.hold, args.first_hold, fd)
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:

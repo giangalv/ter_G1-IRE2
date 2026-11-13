@@ -69,7 +69,7 @@ Request/response shape: [05](05-unitree-dds.md). `header.identity.id` must be un
 | 7001 / 7002 | GetFsmId / GetFsmMode | answer in ~1 ms; 7002 always `{"data":0}` |
 | 7005 | GetStandHeight | code **7301**, `{"data":0.0}` in every state tried |
 | 7101 | SetFsmId `{"data":n}` | **1** from 4 and from 802: ack in 1 ms, FSM 1 within the second, leg mean \|tau_est\| 4 → 0.2 in 1–2 s (the remote's key needs ~5 s). **501** from 4: FSM 501 in ~1 s, entry transient \|tau\| ≈ 10 for a second, then settled (torso pitch +0.22 in 4 went to +0.04) |
-| 7105 | SetVelocity `{"velocity":[vx,vy,omega],"duration":s}` | accepted (code 0) in 802: zero → nothing; 0.1 m/s for 0.5 s → no reaction; 0.2 m/s for 1.0 s → a small posture shift only (max \|dq\| 0.3 rad/s, "it moved but did not step"). The sticks in 802 and 501 do walk it (\|dq\| 1–3 rad/s). **Not yet tried in 501** |
+| 7105 | SetVelocity `{"velocity":[vx,vy,omega],"duration":s}` | accepted (code 0) in 802: zero → nothing; 0.1 m/s for 0.5 s → no reaction; 0.2 m/s for 1.0 s → a small posture shift only (max \|dq\| 0.3 rad/s, "it moved but did not step"). The sticks in 802 and 501 do walk it (\|dq\| 1–3 rad/s). In **501**: 0.2 m/s for ~1 s walks, short taps only rock the torso, see the section above |
 
 ## Safety of the tools
 
@@ -88,17 +88,47 @@ It starts **disarmed**. `r` arms, `w`/`s` forward/back, `a`/`d` step left/right,
 of the caps (0.2 m/s, 0.1 m/s, 0.3 rad/s; hard ceiling 0.4 / 0.2 / 0.6), `space` zero velocity + disarm, `x` damp
 (`SetFsmId 1`, repeated until FSM 1 is seen), `Ctrl-C` zero velocity and quit.
 
-* **Dead-man**: a motion key acts for `--hold` s (0.2) after its last key event, so it needs the terminal's key repeat:
-  a tap is a short step, a held key walks. A request is sent every 0.1 s with `"duration": 0.3`, so if the program, the
-  cable or the Wi-Fi dies the robot's own timeout stops the command; on release a zero is sent at once.
+* **Dead-man**: the first press of a key keeps the command alive for `--first-hold` s (0.6: it covers the terminal's
+  key-repeat delay of ~0.5 s, and the gait needs ~1 s of command to start, see below); once the repeats arrive each
+  one keeps it alive only `--hold` s (0.2), so on release the robot stops within ~0.2 s. A single tap is a 0.6 s
+  command. A request is sent every 0.1 s with `"duration": 0.3`, so if the program, the cable or the Wi-Fi dies the
+  robot's own timeout stops the command; on release a zero is sent at once.
 * **Guards** (a trip disarms; press `r` again): FSM id must be **501** and fresh (the program polls 7001 at 2 Hz itself,
   the answers do not reliably carry `api_id`), `/lf/lowstate` not older than 0.5 s, |roll| and |pitch| < 0.35 rad, every
   velocity request answered with code 0 (three lost in a row trip it).
-* Tested **offline only** (a fake `/api/sport` service and a pty that presses the keys): refusal without
-  `G1_ALLOW_MOTION`, no arming in FSM 4, 0.1 m/s while held, zero within 0.1 s of the release, speed levels, damp, stale
-  `lowstate`, tilt, `--dry` sending nothing, `Ctrl-C` mid-walk sending three zeros. Not yet run on the robot.
+* Tested offline (a fake `/api/sport` service and a pty that presses the keys): refusal without `G1_ALLOW_MOTION`,
+  no arming in FSM 4, speed levels, damp, stale `lowstate`, tilt, `--dry` sending nothing, `Ctrl-C` mid-walk sending
+  three zeros, a held key with a 0.5 s repeat delay giving one continuous command (23 requests, largest gap 0.11 s) and
+  a zero 20 ms after the last repeat, a tap giving 0.6 s. On the robot: see the next section.
 * The remote remains the person's backup (L2+B, ~5 s in a walking state); how the robot combines the remote's sticks
   with an API velocity has not been tested, so do not use both at once.
+
+## What an API velocity does in regular mode (2026-11-13)
+
+Robot on the support stand, feet on the floor, FSM 501 entered with R1+Y, laptop on the cable. Logs: the commands seen
+on `/api/sport/request`, the IMU gyro and the leg joint speeds of `/lf/lowstate`.
+
+| Command | Result |
+|---|---|
+| Taps of 0.3 s (3 requests) at 0.05-0.25 (forward 0.15 m/s, turn 0.25 rad/s, sideways 0.05 m/s) | the torso rocks; the person saw the **same movement for forward, left turn and right turn**; no net yaw (e.g. -0.66 -> -0.66 rad); the turn taps began with a yaw twitch of -0.9 and -1.0 rad/s whatever the sign (two samples) |
+| `vx` +0.20 m/s for ~1.2 s (12 requests) | **real steps** (person's report); legs max speed 5.6 rad/s, gyro z within ±0.26 rad/s (straight) |
+| `omega` +0.5 rad/s for ~1.2 s | turns left, integrated yaw +21° |
+| `omega` -0.5 rad/s for ~2 s | turns right, integrated yaw -39° (person: "q and e work correctly") |
+
+So, with this firmware and these calls: a velocity of 0.2 m/s (0.5 rad/s) held for about a second and more **walks**; the
+short, small taps only make the robot rock. The minimum speed that steps, the distance covered, backward, sideways and the
+sign of `vy` are **not measured yet**. The turns reach about 60-70 % of the commanded angle (0.6 and 1.0 rad
+commanded, 0.37 and 0.67 measured), because of the start delay.
+
+The remote's sticks, for comparison (the person moved the left stick forward, back, sideways, then the right stick to turn,
+the same day): they step 0.3-0.9 s after a stick passes ~0.2; a backward stick held at 0.09-0.18 for 2.4 s did not step and
+0.19+ did (one episode: a dead zone near 0.2 is likely, not proven); sideways did not step at 0.4-0.86 for 2 s but did at 1.0
+(also one episode); full right stick turns at up to ±0.9-1.2 rad/s; positive `lx` is the stick to the right, positive gyro z a
+turn to the left. The remote's values are mirrored on the DDS topic **`/wirelesscontroller`** (`unitree_go/WirelessController`:
+`lx, ly, rx, ry, keys`; 2 publishers and 3 subscribers on the robot): it is silent while the sticks are idle and publishes at
+20 Hz while they are used, with the same stick values as `/lf/lowstate.wireless_remote` (median difference 0). Who reads it
+inside the robot is unknown. A third-party report ([unitree_sdk2_python issue 170](https://github.com/unitreerobotics/unitree_sdk2_python/issues/170),
+one user, firmware 1.5.3, unverified) says that after `SetFsmId(501)` 0.1 m/s for 2 s did not walk and 0.2 m/s did.
 
 ## Reproduce
 
@@ -112,6 +142,6 @@ G1_ALLOW_MOTION=1 python3 tools/sport_call.py fsm 501
 
 ## Open
 
-* `SetVelocity` and `damp` in **501**; the first step on the floor.
+* The minimum speed that steps in **501**, backward, sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
 * Whether `SetFsmId 4` and `SetFsmId 501` from damping (without the remote) work, and a software way out of 0 (zero torque).
 * 550/702/1001, `GetStandHeight` code 7301, and what the remote's other keys (F1, F2, R2+Up/Down, START) do.
