@@ -12,7 +12,9 @@ Keys:
     a / d    step left / right
     1 2 3    speed 25 / 50 / 100 % of the caps (starts at 50 %)
     space    zero velocity and disarm
-    x        DAMP (SetFsmId 1): the robot goes limp at once. The software emergency stop.
+    x        STOP: zero velocity and disarm. Harmless if pressed by mistake.
+    x, Enter DAMP (SetFsmId 1): Enter within 3 s after x. The robot goes limp at once (and falls if it is not held):
+             the software emergency stop, deliberately two different keys, so that a stray or held x cannot do it.
     Ctrl-C   zero velocity and quit (the robot stays standing in regular mode)
 
 Dead-man: a motion key acts only while the terminal keeps repeating it. After the FIRST press of a key the command lasts
@@ -51,7 +53,8 @@ MOVE_FSM = 501                 # regular mode of the 29-motor G1 (docs/08)
 DEFAULT_CAPS = (0.2, 0.1, 0.3)  # m/s forward, m/s sideways, rad/s
 HARD_CAPS = (0.4, 0.2, 0.6)
 SEND_PERIOD = 0.1              # s between velocity requests while a key is held
-REPEAT_GAP = 0.15              # s: the same key again within this gap counts as the terminal's key repeat
+DAMP_WINDOW = 3.0              # s after x in which Enter means DAMP
+REPEAT_GAP = 0.15             # s: the same key again within this gap counts as the terminal's key repeat
 CMD_DURATION = 0.3             # s, the robot's own timeout of every velocity request
 FSM_STALE_S, LOW_STALE_S, TILT_LIMIT = 2.0, 0.5, 0.35
 SPEED = {"1": 0.25, "2": 0.5, "3": 1.0}
@@ -155,11 +158,13 @@ def say(text):
     sys.stdout.flush()
 
 
-def draw(node, armed, want, level, now):
+def draw(node, armed, want, level, now, damp_ready=False):
     fsm = str(node.fsm) if node.fsm is not None and now - node.fsm_t <= FSM_STALE_S else "?"
     low = f"{(now - node.low_t) * 1000:.0f} ms" if node.low_t is not None else "none"
     ack = f"{node.last_ms:.0f} ms" if node.last_ms is not None else "-"
     mode = "DRY" if node.dry else ("ARMED" if armed else "disarmed")
+    if damp_ready:
+        mode += " ENTER=DAMP"
     sys.stdout.write(f"\r\x1b[K[{mode}] FSM {fsm} | v {want[0]:+.2f} {want[1]:+.2f} {want[2]:+.2f} | speed {int(SPEED[level] * 100)}%"
                      f" | sent {node.sent} ack {node.acked} ({ack}) | rpy {node.rpy[0]:+.2f} {node.rpy[1]:+.2f} | low {low}")
     sys.stdout.flush()
@@ -170,6 +175,7 @@ def loop(node, caps, hold, first_hold, fd):
     want = (0.0, 0.0, 0.0)
     hold_until = last_send = last_poll = last_draw = last_damp = 0.0
     damp_tries = 0
+    damp_ready_until = 0.0
     last_key, last_key_t = None, 0.0
 
     def stop_if_walking():
@@ -192,16 +198,25 @@ def loop(node, caps, hold, first_hold, fd):
                     stop_if_walking()
                     disarm("space")
                 elif ch == "x":
-                    damp_tries, last_damp = 5, 0.0
-                    disarm("x = DAMP")
-                    say("DAMP requested" + (" (dry: nothing is sent)" if node.dry else ""))
+                    first = now >= damp_ready_until          # a held x repeats: act and print only once
+                    if armed:
+                        stop_if_walking()
+                    disarm("x")
+                    damp_ready_until = now + DAMP_WINDOW
+                    if first:
+                        say(f"STOPPED. Press Enter within {DAMP_WINDOW:.0f} s to DAMP (the robot goes limp)")
+                elif ch in "\r\n":                 # Enter: only counts right after x
+                    if now < damp_ready_until:
+                        damp_ready_until = 0.0
+                        damp_tries, last_damp = 5, 0.0
+                        say("DAMP requested" + (" (dry: nothing is sent)" if node.dry else ""))
                 elif ch == "r":
                     why = node.blocked(now)
                     if why:
                         say(f"cannot arm: {why}")
                     elif not armed:
                         armed = True
-                        say("ARMED: hold w/s/a/d/q/e, space = stop, x = damp")
+                        say("ARMED: hold w/s/a/d/q/e, space or x = stop, x then Enter = damp")
                 elif ch in SPEED:
                     level = ch
                 elif ch in MOVES and armed:
@@ -237,7 +252,7 @@ def loop(node, caps, hold, first_hold, fd):
             node.velocity(*want)
             moving, last_send = True, now
         if now - last_draw >= 0.2:
-            draw(node, armed, want, level, now)
+            draw(node, armed, want, level, now, now < damp_ready_until)
             last_draw = now
 
 
