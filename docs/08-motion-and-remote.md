@@ -171,6 +171,7 @@ G1_ALLOW_MOTION=1 python3 tools/sport_call.py fsm 501
 
 ## Open
 
-* The minimum speed that steps in **501**, backward, sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
+* Sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
+* The minimum speed that steps in **501**: 0.2 m/s steps, on the cable and over the Wi-Fi (2026-11-13 14:34-14:36, laptop on the robot's AP, RViz following the robot: real steps, 96 velocity requests, one answer slower than 50 ms, no guard tripped). A 0.1 m/s command for ~2 s over the Wi-Fi (14:35:50): the person reported steps only at speed level 3 (0.2 m/s), so 0.1 m/s most likely does not step; nothing between 0.1 and 0.2 has been tried.
 * Whether `SetFsmId 4` (teleop `l`) and `SetFsmId 0` (`z`) work on the robot, whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4), and a software way out of 0 (zero torque): `p` from 0 is the candidate, never tried. Whether a remote switched OFF leaves `wireless_remote` all zero (the teleop's start check assumes it).
 * 550/702/1001, `GetStandHeight` code 7301, and what the remote's other keys (F1, F2, R2+Up/Down, START) do.
