@@ -11,10 +11,9 @@ Keys:
     w / s    forward / backward          q / e   turn left / right
     a / d    step left / right
     1 2 3    speed 25 / 50 / 100 % of the caps (starts at 50 %)
-    space    zero velocity and disarm
-    x        STOP: zero velocity and disarm. Harmless if pressed by mistake.
-    x, Enter DAMP (SetFsmId 1): Enter within 3 s after x. The robot goes limp at once (and falls if it is not held):
-             the software emergency stop, deliberately two different keys, so that a stray or held x cannot do it.
+    Enter    STOP: zero velocity and disarm (space does the same)
+    x        HOLD x FOR 3 SECONDS = DAMP (SetFsmId 1): the robot goes limp at once (and falls if it is not held).
+             A tap or a stray x does nothing; the status line counts the seconds; releasing x cancels.
     Ctrl-C   zero velocity and quit (the robot stays standing in regular mode)
 
 Dead-man: a motion key acts only while the terminal keeps repeating it. After the FIRST press of a key the command lasts
@@ -53,7 +52,8 @@ MOVE_FSM = 501                 # regular mode of the 29-motor G1 (docs/08)
 DEFAULT_CAPS = (0.2, 0.1, 0.3)  # m/s forward, m/s sideways, rad/s
 HARD_CAPS = (0.4, 0.2, 0.6)
 SEND_PERIOD = 0.1              # s between velocity requests while a key is held
-DAMP_WINDOW = 3.0              # s after x in which Enter means DAMP
+DAMP_HOLD = 3.0                # s the x key must be held for DAMP
+X_GAP, X_FAST_GAP, X_MIN_FAST = 0.7, 0.2, 20   # largest gap in a hold (the first one is the repeat delay), repeat-phase gap, repeats needed
 REPEAT_GAP = 0.15             # s: the same key again within this gap counts as the terminal's key repeat
 CMD_DURATION = 0.3             # s, the robot's own timeout of every velocity request
 FSM_STALE_S, LOW_STALE_S, TILT_LIMIT = 2.0, 0.5, 0.35
@@ -158,13 +158,13 @@ def say(text):
     sys.stdout.flush()
 
 
-def draw(node, armed, want, level, now, damp_ready=False):
+def draw(node, armed, want, level, now, damp_progress=""):
     fsm = str(node.fsm) if node.fsm is not None and now - node.fsm_t <= FSM_STALE_S else "?"
     low = f"{(now - node.low_t) * 1000:.0f} ms" if node.low_t is not None else "none"
     ack = f"{node.last_ms:.0f} ms" if node.last_ms is not None else "-"
     mode = "DRY" if node.dry else ("ARMED" if armed else "disarmed")
-    if damp_ready:
-        mode += " ENTER=DAMP"
+    if damp_progress:
+        mode += f" DAMP {damp_progress}"
     sys.stdout.write(f"\r\x1b[K[{mode}] FSM {fsm} | v {want[0]:+.2f} {want[1]:+.2f} {want[2]:+.2f} | speed {int(SPEED[level] * 100)}%"
                      f" | sent {node.sent} ack {node.acked} ({ack}) | rpy {node.rpy[0]:+.2f} {node.rpy[1]:+.2f} | low {low}")
     sys.stdout.flush()
@@ -175,7 +175,7 @@ def loop(node, caps, hold, first_hold, fd):
     want = (0.0, 0.0, 0.0)
     hold_until = last_send = last_poll = last_draw = last_damp = 0.0
     damp_tries = 0
-    damp_ready_until = 0.0
+    x_start, x_last, x_fast, x_fired = None, 0.0, 0, False
     last_key, last_key_t = None, 0.0
 
     def stop_if_walking():
@@ -194,21 +194,23 @@ def loop(node, caps, hold, first_hold, fd):
         if select.select([fd], [], [], 0.02)[0]:
             for ch in os.read(fd, 64).decode(errors="ignore"):
                 now = time.monotonic()
-                if ch == " ":
-                    stop_if_walking()
-                    disarm("space")
-                elif ch == "x":
-                    first = now >= damp_ready_until          # a held x repeats: act and print only once
+                if ch in " \r\n":                  # space or Enter: STOP (a held key repeats: act only while armed)
                     if armed:
                         stop_if_walking()
-                    disarm("x")
-                    damp_ready_until = now + DAMP_WINDOW
-                    if first:
-                        say(f"STOPPED. Press Enter within {DAMP_WINDOW:.0f} s to DAMP (the robot goes limp)")
-                elif ch in "\r\n":                 # Enter: only counts right after x
-                    if now < damp_ready_until:
-                        damp_ready_until = 0.0
+                        disarm("Enter" if ch != " " else "space")
+                elif ch == "x":
+                    # DAMP = x HELD for DAMP_HOLD s: the terminal's repeat must be continuous (gaps <= X_GAP, and a
+                    # fast repeat phase of at least X_MIN_FAST events), so taps and a stray x do nothing
+                    if x_start is None or now - x_last > X_GAP:
+                        x_start, x_fast, x_fired = now, 0, False
+                        say(f"x pressed: hold it {DAMP_HOLD:.0f} s to DAMP (the robot goes limp), release to cancel; Enter stops")
+                    elif now - x_last <= X_FAST_GAP:
+                        x_fast += 1
+                    x_last = now
+                    if not x_fired and now - x_start >= DAMP_HOLD and x_fast >= X_MIN_FAST:
+                        x_fired = True                 # one request per hold; release x to start over
                         damp_tries, last_damp = 5, 0.0
+                        disarm("x held = DAMP")
                         say("DAMP requested" + (" (dry: nothing is sent)" if node.dry else ""))
                 elif ch == "r":
                     why = node.blocked(now)
@@ -216,7 +218,7 @@ def loop(node, caps, hold, first_hold, fd):
                         say(f"cannot arm: {why}")
                     elif not armed:
                         armed = True
-                        say("ARMED: hold w/s/a/d/q/e, space or x = stop, x then Enter = damp")
+                        say("ARMED: hold w/s/a/d/q/e, Enter or space = stop, hold x 3 s = damp")
                 elif ch in SPEED:
                     level = ch
                 elif ch in MOVES and armed:
@@ -252,7 +254,8 @@ def loop(node, caps, hold, first_hold, fd):
             node.velocity(*want)
             moving, last_send = True, now
         if now - last_draw >= 0.2:
-            draw(node, armed, want, level, now, now < damp_ready_until)
+            draw(node, armed, want, level, now,
+                 f"x {now - x_start:.1f}/{DAMP_HOLD:.0f} s" if x_start is not None and not x_fired and now - x_last <= X_GAP else "")
             last_draw = now
 
 

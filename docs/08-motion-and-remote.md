@@ -85,10 +85,11 @@ G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py # --dry: shows everything, se
 ```
 
 It starts **disarmed**. `r` arms, `w`/`s` forward/back, `a`/`d` step left/right, `q`/`e` turn, `1 2 3` speed 25/50/100 %
-of the caps (0.2 m/s, 0.1 m/s, 0.3 rad/s; hard ceiling 0.4 / 0.2 / 0.6), `space` or `x` zero velocity + disarm,
-**`x` and then Enter within 3 s = damp** (`SetFsmId 1`, repeated until FSM 1 is seen; two different keys on purpose,
-because damping makes the robot go limp and a stray or held `x` must not do it: a held `x` only repeats the stop),
-`Ctrl-C` zero velocity and quit.
+of the caps (0.2 m/s, 0.1 m/s, 0.3 rad/s; hard ceiling 0.4 / 0.2 / 0.6), `Enter` (or space) zero velocity + disarm,
+**`x` held for 3 s = damp** (`SetFsmId 1`, repeated until FSM 1 is seen; damping makes the robot go limp, so it needs a
+long deliberate gesture: a tap, a stray `x` or 2.5 s of it do nothing, the status line counts the seconds, releasing
+cancels, one request per hold; it relies on the terminal's key repeat, so a terminal that repeats slower than ~5 per
+second never reaches it and the remote's L2+B stays the way out), `Ctrl-C` zero velocity and quit.
 
 * **Dead-man**: the first press of a key keeps the command alive for `--first-hold` s (0.6: it covers the terminal's
   key-repeat delay of ~0.5 s, and the gait needs ~1 s of command to start, see below); once the repeats arrive each
