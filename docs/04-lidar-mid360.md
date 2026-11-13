@@ -72,6 +72,32 @@ dex3_service_l, dex3_service_r, emergency_stop 1.0.0.4, g1_arm_example 2.0.2.5, 
 log_system 2.0.0.11, motion_switcher 1.0.0.1, net_switcher 1.0.2.1, ota_box, ota_pipe, robot_state 3.0.0.8,
 robot_type_service 1.0.2.8, state_estimator 2.0.0.25.
 
+## The front mask and the head's own edges (2026-11-13)
+
+The robot ships with a physical mask in front of the LiDAR. Measured on the robot (hanging, cloud 10 Hz, 20 000 points of which
+about 40 % have no return and come as `x = y = z = 0`; "valid" = range > 5 cm; azimuth = `atan2(y, x)` in the sensor frame,
+0 = straight ahead; 127 clouds per state):
+
+| | mask fitted | mask removed |
+|---|---|---|
+| valid points per cloud | 9 382 | 12 224 |
+| forward wedge `|az| < 40 deg` | 245 | 3 100 |
+| every other azimuth | same | same |
+
+The mask closes exactly the free forward wedge; with it removed the LiDAR sees ahead. **Two shadows remain with or without the mask:
+the edges of the head**, at azimuth +40...+60 deg (about 86 points per cloud, median range 0.11 m) and -60...-40 deg (about 236 per cloud,
+a third of them closer than 0.6 m). They are fixed in the sensor frame, because the sensor is rigid on the head. The arms and shoulders
+also return points at 0.1-0.6 m around +-80...100 deg.
+
+Decision (2026-11-13): the viewer (`g1_viz`) shows the cloud as it comes and does **not** filter these points. Whoever builds on this base
+for navigation has to cut them: for walking, drop returns closer than about 0.6 m in the sectors +-40...100 deg (simple range/azimuth
+crop in the sensor frame); for manipulation, where the arms enter the view, use a self-filter from the URDF and the joint states instead.
+
+Why Unitree fits the mask is not known. LiDAR on or off made no difference to the D435i depth image (valid pixels, frame-to-frame noise),
+and the camera made none to the cloud, but **the fitted mask costs the camera its lower field of view**: the depth image is the same in rows
+0-336 and falls to 75 %, 30 % and 2 % valid in rows 336-384, 384-432, 432-480 (D435i, same boot, three states mask on / off / on). Data in
+the support bundle, not in this repo.
+
 ## What I got wrong first
 
 Earlier the same day I concluded the LiDAR was **not streaming**. I had only
