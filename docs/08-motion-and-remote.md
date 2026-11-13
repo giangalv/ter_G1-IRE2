@@ -77,6 +77,29 @@ Request/response shape: [05](05-unitree-dds.md). `header.identity.id` must be un
 * The software stop is `damp`: the robot goes limp at once (it does not brake), so use `stop` (zero velocity) first and `damp` as the emergency. The remote's L2+B is the person's backup but takes ~5 s in a walking state.
 * Everything above was done on the support stand with the feet touching the floor; a walk on the floor needs its own risk assessment.
 
+## Keyboard teleop (`tools/keyboard_teleop.py`)
+
+```bash
+source tools/g1_env.sh cable                       # or wifi, docs/07
+G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py # --dry: shows everything, sends only the FSM poll
+```
+
+It starts **disarmed**. `r` arms, `w`/`s` forward/back, `a`/`d` step left/right, `q`/`e` turn, `1 2 3` speed 25/50/100 %
+of the caps (0.2 m/s, 0.1 m/s, 0.3 rad/s; hard ceiling 0.4 / 0.2 / 0.6), `space` zero velocity + disarm, `x` damp
+(`SetFsmId 1`, repeated until FSM 1 is seen), `Ctrl-C` zero velocity and quit.
+
+* **Dead-man**: a motion key acts for `--hold` s (0.2) after its last key event, so it needs the terminal's key repeat:
+  a tap is a short step, a held key walks. A request is sent every 0.1 s with `"duration": 0.3`, so if the program, the
+  cable or the Wi-Fi dies the robot's own timeout stops the command; on release a zero is sent at once.
+* **Guards** (a trip disarms; press `r` again): FSM id must be **501** and fresh (the program polls 7001 at 2 Hz itself,
+  the answers do not reliably carry `api_id`), `/lf/lowstate` not older than 0.5 s, |roll| and |pitch| < 0.35 rad, every
+  velocity request answered with code 0 (three lost in a row trip it).
+* Tested **offline only** (a fake `/api/sport` service and a pty that presses the keys): refusal without
+  `G1_ALLOW_MOTION`, no arming in FSM 4, 0.1 m/s while held, zero within 0.1 s of the release, speed levels, damp, stale
+  `lowstate`, tilt, `--dry` sending nothing, `Ctrl-C` mid-walk sending three zeros. Not yet run on the robot.
+* The remote remains the person's backup (L2+B, ~5 s in a walking state); how the robot combines the remote's sticks
+  with an API velocity has not been tested, so do not use both at once.
+
 ## Reproduce
 
 ```bash
