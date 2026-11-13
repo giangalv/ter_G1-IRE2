@@ -15,10 +15,10 @@ runs at ~2 Hz all the time, so `/api/sport/response` always carries the current 
 
 | id | State | Remote | API (`tools/sport_call.py`) |
 |---|---|---|---|
-| 0 | Zero torque (the state after boot) | **L2+Y**, from damping | — |
-| 1 | Damping | **L2+B** | `damp` / `fsm 1` |
-| 4 | Locked stand: the legs hold the weight | **L2+Up**, from damping | `fsm 4` is allowed but has never been sent |
-| **501** | **Regular mode**: slower walking | **R1+Y**, from 4 | `fsm 501`, from 4 |
+| 0 | Zero torque (the state after boot) | **L2+Y**, from damping | teleop key `z` (`SetFsmId 0`, never sent on the robot yet) |
+| 1 | Damping | **L2+B** | `damp` / `fsm 1`; teleop key `p` |
+| 4 | Locked stand: the legs hold the weight | **L2+Up**, from damping | `fsm 4` is allowed but has never been sent; teleop key `l` |
+| **501** | **Regular mode**: slower walking | **R1+Y**, from 4 | `fsm 501`, from 4; teleop key `g` |
 | 802 | **Running mode**: faster, more agile | **R2+A**, from 4 | — |
 | 550, 702, 1001 | Seen only as transients/side effects on 2026-11-06 (550 for ~5 s after R1+X in 802; 702 after L2+X; 1001 flickered with R1+R2+X); not understood | | |
 
@@ -86,10 +86,26 @@ G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py # --dry: shows everything, se
 
 It starts **disarmed**. `r` arms, `w`/`s` forward/back, `a`/`d` step left/right, `q`/`e` turn, `1 2 3` speed 25/50/100 %
 of the caps (0.2 m/s, 0.1 m/s, 0.3 rad/s; hard ceiling 0.4 / 0.2 / 0.6), `Enter` (or space) zero velocity + disarm,
-**`x` held for 3 s = damp** (`SetFsmId 1`, repeated until FSM 1 is seen; damping makes the robot go limp, so it needs a
-long deliberate gesture: a tap, a stray `x` or 2.5 s of it do nothing, the status line counts the seconds, releasing
-cancels, one request per hold; it relies on the terminal's key repeat, so a terminal that repeats slower than ~5 per
-second never reaches it and the remote's L2+B stays the way out), `Ctrl-C` zero velocity and quit.
+`Ctrl-C` zero velocity and quit. The status line says `ARMED  Enter/Space=STOP` while armed.
+
+**The robot's state, from the keyboard (no remote needed to go up or down the ladder): a key HELD for 3 s**, the same
+order as the remote's keys in the table above:
+
+| Key | State | `SetFsmId` | Only from | Remote equivalent |
+|---|---|---|---|---|
+| `z` | zero torque (motors off) | 0 | damping (1) | L2+Y |
+| `p` | damping (limp at once) | 1 | any state (it is the emergency) | L2+B |
+| `l` | locked standing | 4 | damping (1) | L2+Up |
+| `g` | regular mode (walking-ready) | 501 | locked standing (4) | R1+Y |
+
+So the way up is `p`, `l`, `g` (then `r` to arm) and the way down is `p`. These are deliberate gestures: a tap, a stray
+key, another key in between, or releasing early does nothing; the status line counts the seconds (`LOCKED STANDING l
+1.2/3 s`); one request per hold (damping is repeated until FSM 1 is seen, the others are sent once and the program
+waits 6 s for the new id, then says it did not change); a key that does not fit the robot's present state says so when
+pressed (`g: REGULAR MODE starts from FSM 4 (locked standing): hold l first ...`) and does not count. It relies on the
+terminal's key repeat, so a terminal that repeats slower than ~5 per second never reaches 3 s and the remote stays the
+way out. `x` no longer does anything (it was the damping key until 2026-11-13). **Of these, only `p` (damp) and `g` from
+FSM 4 have been proven on the robot; `z` and `l` are the first uses of `SetFsmId 0` and `SetFsmId 4`.**
 
 * **Dead-man**: the first press of a key keeps the command alive for `--first-hold` s (0.6: it covers the terminal's
   key-repeat delay of ~0.5 s, and the gait needs ~1 s of command to start, see below); once the repeats arrive each
@@ -99,10 +115,20 @@ second never reaches it and the remote's L2+B stays the way out), `Ctrl-C` zero 
 * **Guards** (a trip disarms; press `r` again): FSM id must be **501** and fresh (the program polls 7001 at 2 Hz itself,
   the answers do not reliably carry `api_id`), `/lf/lowstate` not older than 0.5 s, |roll| and |pitch| < 0.35 rad, every
   velocity request answered with code 0 (three lost in a row trip it).
+* **The Unitree remote must be ON** (it is the backup, L2+B damps the robot): at start the program waits 4 s for a
+  non-zero `wireless_remote` payload in `/lf/lowstate` and, if there is none, refuses to run with `SAFETY: ... SWITCH ON
+  THE UNITREE REMOTE first` (exit status 1, nothing sent; with `--dry` it only warns). The same check is a guard: arming
+  needs a payload seen in the last 2 s, and if the remote goes off while armed the program stops the robot and disarms.
+  What was seen: remote on and idle = `55 51` followed by zeros, constant for 8+ minutes (2026-11-13); remote not linked
+  to the robot = all zero (2026-11-06). A remote switched off has not been recorded yet.
 * Tested offline (a fake `/api/sport` service and a pty that presses the keys): refusal without `G1_ALLOW_MOTION`,
   no arming in FSM 4, speed levels, damp, stale `lowstate`, tilt, `--dry` sending nothing, `Ctrl-C` mid-walk sending
   three zeros, a held key with a 0.5 s repeat delay giving one continuous command (23 requests, largest gap 0.11 s) and
-  a zero 20 ms after the last repeat, a tap giving 0.6 s. On the robot: see the next section.
+  a zero 20 ms after the last repeat, a tap giving 0.6 s. The state keys (2026-11-13, 21 scenarios): each of `z p l g`
+  from the right state sends one `SetFsmId` and the new id is confirmed; from the wrong state it refuses at the press and
+  sends nothing; `l` then `g` in a row reaches 501; a tap, 2 s, a hold interrupted by another key, alternating keys and
+  the old `x` send nothing; an FSM that does not change, an error answer and `--dry` are reported; the remote missing at
+  start refuses, and a remote that goes off mid-session disarms. On the robot: see the next section.
 * The remote remains the person's backup (L2+B, ~5 s in a walking state); how the robot combines the remote's sticks
   with an API velocity has not been tested, so do not use both at once.
 
@@ -146,5 +172,5 @@ G1_ALLOW_MOTION=1 python3 tools/sport_call.py fsm 501
 ## Open
 
 * The minimum speed that steps in **501**, backward, sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
-* Whether `SetFsmId 4` and `SetFsmId 501` from damping (without the remote) work, and a software way out of 0 (zero torque).
+* Whether `SetFsmId 4` (teleop `l`) and `SetFsmId 0` (`z`) work on the robot, whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4), and a software way out of 0 (zero torque): `p` from 0 is the candidate, never tried. Whether a remote switched OFF leaves `wireless_remote` all zero (the teleop's start check assumes it).
 * 550/702/1001, `GetStandHeight` code 7301, and what the remote's other keys (F1, F2, R2+Up/Down, START) do.
