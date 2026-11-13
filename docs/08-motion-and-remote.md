@@ -120,7 +120,9 @@ FSM 4 have been proven on the robot; `z` and `l` are the first uses of `SetFsmId
   THE UNITREE REMOTE first` (exit status 1, nothing sent; with `--dry` it only warns). The same check is a guard: arming
   needs a payload seen in the last 2 s, and if the remote goes off while armed the program stops the robot and disarms.
   What was seen: remote on and idle = `55 51` followed by zeros, constant for 8+ minutes (2026-11-13); remote not linked
-  to the robot = all zero (2026-11-06). A remote switched off has not been recorded yet.
+  to the robot = all zero (2026-11-06); remote switched OFF = all zero too (2026-11-13: payload all zero from 14:52:30,
+  `55 51` again at 14:52:52 after switching it on, about 22 s later; the exact delay after the switch-off was not
+  timed). The teleop calls the remote lost when 2 s pass without a non-zero payload.
 * Tested offline (a fake `/api/sport` service and a pty that presses the keys): refusal without `G1_ALLOW_MOTION`,
   no arming in FSM 4, speed levels, damp, stale `lowstate`, tilt, `--dry` sending nothing, `Ctrl-C` mid-walk sending
   three zeros, a held key with a 0.5 s repeat delay giving one continuous command (23 requests, largest gap 0.11 s) and
@@ -173,5 +175,5 @@ G1_ALLOW_MOTION=1 python3 tools/sport_call.py fsm 501
 
 * Sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
 * The minimum speed that steps in **501**: 0.2 m/s steps, on the cable and over the Wi-Fi (2026-11-13 14:34-14:36, laptop on the robot's AP, RViz following the robot: real steps, 96 velocity requests, one answer slower than 50 ms, no guard tripped). A 0.1 m/s command for ~2 s over the Wi-Fi (14:35:50): the person reported steps only at speed level 3 (0.2 m/s), so 0.1 m/s most likely does not step; nothing between 0.1 and 0.2 has been tried.
-* Whether `SetFsmId 4` (teleop `l`) and `SetFsmId 0` (`z`) work on the robot, whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4), and a software way out of 0 (zero torque): `p` from 0 is the candidate, never tried. Whether a remote switched OFF leaves `wireless_remote` all zero (the teleop's start check assumes it).
+* Whether `SetFsmId 4` (teleop `l`) and `SetFsmId 0` (`z`) work on the robot, whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4), and a software way out of 0 (zero torque): `p` from 0 is the candidate, never tried.
 * 550/702/1001, `GetStandHeight` code 7301, and what the remote's other keys (F1, F2, R2+Up/Down, START) do.
