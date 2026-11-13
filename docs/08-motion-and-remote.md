@@ -15,9 +15,9 @@ runs at ~2 Hz all the time, so `/api/sport/response` always carries the current 
 
 | id | State | Remote | API (`tools/sport_call.py`) |
 |---|---|---|---|
-| 0 | Zero torque (the state after boot) | **L2+Y**, from damping | teleop key `z` (`SetFsmId 0`, never sent on the robot yet) |
-| 1 | Damping | **L2+B** | `damp` / `fsm 1`; teleop key `p` |
-| 4 | Locked stand: the legs hold the weight | **L2+Up**, from damping | `fsm 4` is allowed but has never been sent; teleop key `l` |
+| 0 | Zero torque (the state after boot) | **L2+Y**, from damping | teleop key `z` (`SetFsmId 0` from damping: worked 2026-11-13 15:00:52) |
+| 1 | Damping | **L2+B** | `damp` / `fsm 1`; teleop key `p` (also gets the robot out of 0, zero torque, 2026-11-13 15:01:09) |
+| 4 | Locked stand: the legs hold the weight | **L2+Up**, from damping | `fsm 4` from damping worked 2026-11-13 15:01:15; teleop key `l` |
 | **501** | **Regular mode**: slower walking | **R1+Y**, from 4 | `fsm 501`, from 4; teleop key `g` |
 | 802 | **Running mode**: faster, more agile | **R2+A**, from 4 | — |
 | 550, 702, 1001 | Seen only as transients/side effects on 2026-11-06 (550 for ~5 s after R1+X in 802; 702 after L2+X; 1001 flickered with R1+R2+X); not understood | | |
@@ -104,8 +104,10 @@ key, another key in between, or releasing early does nothing; the status line co
 waits 6 s for the new id, then says it did not change); a key that does not fit the robot's present state says so when
 pressed (`g: REGULAR MODE starts from FSM 4 (locked standing): hold l first ...`) and does not count. It relies on the
 terminal's key repeat, so a terminal that repeats slower than ~5 per second never reaches 3 s and the remote stays the
-way out. `x` no longer does anything (it was the damping key until 2026-11-13). **Of these, only `p` (damp) and `g` from
-FSM 4 have been proven on the robot; `z` and `l` are the first uses of `SetFsmId 0` and `SetFsmId 4`.**
+way out. `x` no longer does anything (it was the damping key until 2026-11-13). **All four were
+used on the robot on 2026-11-13 (support stand, cable, remote in hand): `z` 15:00:52 (1 -> 0), `p` 15:01:09 (0 -> 1), `l`
+15:01:15 (1 -> 4), `g` 15:01:53 (4 -> 501, with the usual entry transient of the legs), each seen as the new FSM id
+within the ~0.5 s resolution of the recorder.**
 
 * **Dead-man**: the first press of a key keeps the command alive for `--first-hold` s (0.6: it covers the terminal's
   key-repeat delay of ~0.5 s, and the gait needs ~1 s of command to start, see below); once the repeats arrive each
@@ -173,7 +175,7 @@ G1_ALLOW_MOTION=1 python3 tools/sport_call.py fsm 501
 
 ## Open
 
-* Sideways (and the sign of `vy`), the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
+* Sideways: `a` / `d` at `vy` = +/-0.10 m/s (speed level 3 with the default `--vy 0.1`), 2-5 s each, on the stand (2026-11-13 15:03:49-15:04:02): **no sideways steps**, the torso only tilts (the person's report; legs max|dq| <= 0.8 rad/s against 1.8-2.8 rad/s when walking forward or backward). The sign of `vy` is therefore still unverified. Next: `--vy 0.2` (the hard ceiling), and if that does not step either, a higher ceiling for stand tests. Also open: the distance covered, `damp` from a walk, and the first step on the floor (the tests above were on the support stand).
 * The minimum speed that steps in **501**: 0.2 m/s steps, on the cable and over the Wi-Fi (2026-11-13 14:34-14:36, laptop on the robot's AP, RViz following the robot: real steps, 96 velocity requests, one answer slower than 50 ms, no guard tripped). A 0.1 m/s command for ~2 s over the Wi-Fi (14:35:50): the person reported steps only at speed level 3 (0.2 m/s), so 0.1 m/s most likely does not step; nothing between 0.1 and 0.2 has been tried.
-* Whether `SetFsmId 4` (teleop `l`) and `SetFsmId 0` (`z`) work on the robot, whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4), and a software way out of 0 (zero torque): `p` from 0 is the candidate, never tried.
+* Whether `SetFsmId 501` also works straight from damping (the keys only allow it from 4). (Done 2026-11-13: `SetFsmId 0` and `4` work from damping, and `p` gets the robot out of 0.)
 * 550/702/1001, `GetStandHeight` code 7301, and what the remote's other keys (F1, F2, R2+Up/Down, START) do.
