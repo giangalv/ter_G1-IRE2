@@ -4,7 +4,7 @@
 Run it in a real terminal (it reads single keys, so it cannot run from a pipe):
 
     source tools/g1_env.sh cable            # or wifi, see docs/08
-    G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py [--dry] [--vx 0.2] [--vy 0.1] [--w 0.3] [--hold 0.2] [--first-hold 0.6]
+    G1_ALLOW_MOTION=1 python3 tools/keyboard_teleop.py [--dry] [--vx 0.2] [--vy 0.2] [--w 0.3] [--hold 0.2] [--first-hold 0.6]
 
 Keys:
     r        ARM (it starts disarmed: nothing is sent until you press r)
@@ -32,7 +32,7 @@ within 0.3 s.
 Nothing is sent, and you cannot arm, unless ALL of these hold: FSM id = 501 (regular mode, answered by the robot, not
 older than 2 s), /lf/lowstate arrives (not older than 0.5 s), |roll| and |pitch| < 0.35 rad. A guard that trips disarms
 (you must press r again), and so do three unanswered velocity requests and any answer with a code other than 0.
-The remote stays the person's backup (L2+B, ~5 s in a walking state). Caps: defaults 0.2 m/s forward, 0.1 m/s
+The remote stays the person's backup (L2+B, ~5 s in a walking state). Caps: defaults 0.2 m/s forward, 0.2 m/s
 sideways, 0.3 rad/s; the hard ceiling is 0.4 / 0.2 / 0.6. --dry reads and shows everything and sends nothing but the
 FSM poll (7001).
 """
@@ -56,7 +56,7 @@ from unitree_hg.msg import LowState
 
 API_FSM_GET, API_FSM_SET, API_VEL = 7001, 7101, 7105
 MOVE_FSM = 501                 # regular mode of the 29-motor G1 (docs/08)
-DEFAULT_CAPS = (0.2, 0.1, 0.3)  # m/s forward, m/s sideways, rad/s
+DEFAULT_CAPS = (0.2, 0.2, 0.3)  # m/s forward, m/s sideways, rad/s
 HARD_CAPS = (0.4, 0.2, 0.6)
 SEND_PERIOD = 0.1              # s between velocity requests while a key is held
 FSM_HOLD = 3.0                 # s a state key (z p l g) must be held
