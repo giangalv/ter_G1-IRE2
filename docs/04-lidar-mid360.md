@@ -89,6 +89,8 @@ the edges of the head**, at azimuth +40...+60 deg (about 86 points per cloud, me
 a third of them closer than 0.6 m). They are fixed in the sensor frame, because the sensor is rigid on the head. The arms and shoulders
 also return points at 0.1-0.6 m around +-80...100 deg.
 
+The lab robot runs **without the mask from 2026-11-13 on** (the person's decision, the part is kept; Unitree has been asked what it is for).
+
 Decision (2026-11-13): the viewer (`g1_viz`) shows the cloud as it comes and does **not** filter these points. Whoever builds on this base
 for navigation has to cut them: for walking, drop returns closer than about 0.6 m in the sectors +-40...100 deg (simple range/azimuth
 crop in the sensor frame); for manipulation, where the arms enter the view, use a self-filter from the URDF and the joint states instead.
