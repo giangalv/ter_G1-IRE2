@@ -45,6 +45,12 @@ class JointStateRelay(Node):
         self.declare_parameter("publish_odom_tf", True)
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
+        # nav_msgs/Odometry the odom -> base TF is built from; on the real G1 /state_estimator/odom_pelvis (frame odom,
+        # child pelvis, ~50 Hz while the locomotion service runs)
+        self.declare_parameter("odom_topic", "/g1/odom")
+        # true = stamp that TF with this PC's clock (the robot's PC1 clock differs by tens of seconds, and the joint TFs
+        # are stamped here, so a robot stamp would not line up with them in RViz)
+        self.declare_parameter("restamp_odom", False)
         self.declare_parameter("body_joint_names", DEFAULT_BODY_JOINT_NAMES)
         self.declare_parameter("hand_joint_names_left", DEFAULT_HAND_JOINT_NAMES_LEFT)
         self.declare_parameter("hand_joint_names_right", DEFAULT_HAND_JOINT_NAMES_RIGHT)
@@ -93,8 +99,12 @@ class JointStateRelay(Node):
         if bool(self.get_parameter("publish_odom_tf").value):
             self._tf_broadcaster = TransformBroadcaster(self)
             self.create_subscription(
-                Odometry, "/g1/odom", self._on_odom, qos_profile_sensor_data
+                Odometry,
+                str(self.get_parameter("odom_topic").value),
+                self._on_odom,
+                qos_profile_sensor_data,
             )
+        self._restamp_odom: bool = bool(self.get_parameter("restamp_odom").value)
 
         rate = float(self.get_parameter("publish_rate_hz").value)
         self.create_timer(1.0 / max(rate, 1.0), self._publish)
@@ -117,7 +127,9 @@ class JointStateRelay(Node):
         if self._tf_broadcaster is None:
             return
         tf = TransformStamped()
-        tf.header.stamp = msg.header.stamp
+        tf.header.stamp = (
+            self.get_clock().now().to_msg() if self._restamp_odom else msg.header.stamp
+        )
         tf.header.frame_id = self._odom_frame
         tf.child_frame_id = self._base_frame
         tf.transform.translation.x = msg.pose.pose.position.x

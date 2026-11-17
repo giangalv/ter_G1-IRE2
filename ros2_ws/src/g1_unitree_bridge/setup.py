@@ -24,6 +24,7 @@ setup(
             "head_video = g1_unitree_bridge.head_video_node:main",
             "realsense_relay = g1_unitree_bridge.realsense_relay_node:main",
             "hand_camera_relay = g1_unitree_bridge.hand_camera_relay_node:main",
+            "lidar_restamp = g1_unitree_bridge.lidar_restamp_node:main",
         ],
     },
 )

@@ -136,6 +136,17 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("base_height", default_value="0.79"),
             DeclareLaunchArgument(
+                "odom_topic",
+                default_value="/g1/odom",
+                description="nav_msgs/Odometry that moves the robot when fixed_base:=false "
+                "(real G1: /state_estimator/odom_pelvis)",
+            ),
+            DeclareLaunchArgument(
+                "restamp_odom",
+                default_value="false",
+                description="true = stamp the odom TF with this PC's clock (the robot's clock is not synchronised)",
+            ),
+            DeclareLaunchArgument(
                 "lowstate_bridge",
                 default_value="false",
                 description="true = also run g1_unitree_bridge (reads the robot's native DDS state)",
@@ -145,6 +156,12 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="/lowstate",
                 description="/lowstate (~1 kHz, cable) or /lf/lowstate (~20 Hz, WiFi)",
             ),
+            DeclareLaunchArgument(
+                "lidar_topic",
+                default_value="/utlidar/cloud_livox_mid360",
+                description="the robot's cloud that /g1/lidar/points is made from; /g1/lidar/slim = the lighter cloud "
+                "of the filter on the Jetson (base repo tools/lidar_slim.sh), for the Wi-Fi",
+            ),
             Node(
                 package="g1_viz",
                 executable="joint_state_relay",
@@ -153,6 +170,8 @@ def generate_launch_description() -> LaunchDescription:
                 parameters=[
                     {
                         "base_frame": LaunchConfiguration("base_frame"),
+                        "odom_topic": LaunchConfiguration("odom_topic"),
+                        "restamp_odom": ParameterValue(LaunchConfiguration("restamp_odom"), value_type=bool),
                         "publish_odom_tf": ParameterValue(
                             PythonExpression(
                                 ["'", LaunchConfiguration("fixed_base"), "' != 'true'"]
@@ -305,6 +324,15 @@ def generate_launch_description() -> LaunchDescription:
                     }
                 ],
                 condition=IfCondition(LaunchConfiguration("lowstate_bridge")),
+            ),
+            Node(
+                # /utlidar/cloud_livox_mid360 with this PC's clock as stamp (RViz drops the robot's: its clock is off);
+                # subscribes to the robot only while a display watches /g1/lidar/points
+                package="g1_unitree_bridge",
+                executable="lidar_restamp",
+                name="lidar_restamp",
+                output="screen",
+                parameters=[{"in_topic": LaunchConfiguration("lidar_topic")}],
             ),
             OpaqueFunction(function=_setup),
             Node(

@@ -66,7 +66,7 @@ Visualization Manager:
         Depth: 1
         Durability Policy: Volatile
         Reliability Policy: Best Effort
-        Value: /utlidar/cloud_livox_mid360
+        Value: /g1/lidar/points
       Size (m): 0.02
       Style: Flat Squares
       Color Transformer: AxisColor

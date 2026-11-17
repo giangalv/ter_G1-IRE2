@@ -62,10 +62,14 @@ class RealSenseRelay(Node):
         self.declare_parameter("lazy", True)
         self.declare_parameter("color_compressed", False)
         self.declare_parameter("depth_compressed", False)
+        # true (default): stamp every output with THIS PC's clock. The Jetson's clock is not synchronised (tens of seconds off, measured
+        # 2026-11-13), and RViz drops a cloud whose stamp is older than its TF buffer.
+        self.declare_parameter("restamp", True)
 
         gp = self.get_parameter
         self._frame = str(gp("frame_id").value)
         self._scale = float(gp("depth_scale").value)
+        self._restamp = bool(gp("restamp").value)
         self._stride = int(gp("stride").value)
         self._max_range = float(gp("max_range").value)
         self._image_period = 1.0 / max(float(gp("image_rate_hz").value), 0.1)
@@ -191,6 +195,8 @@ class RealSenseRelay(Node):
         out = Image()
         out.header = msg.header
         out.header.frame_id = self._color_frame
+        if self._restamp:
+            out.header.stamp = self.get_clock().now().to_msg()
         out.height, out.width = int(rgb.shape[0]), int(rgb.shape[1])
         out.encoding = "rgb8"
         out.step = out.width * 3
@@ -232,6 +238,8 @@ class RealSenseRelay(Node):
             out = Image()
             out.header = header
             out.header.frame_id = self._frame
+            if self._restamp:
+                out.header.stamp = self.get_clock().now().to_msg()
             out.height, out.width = int(raw.shape[0]), int(raw.shape[1])
             out.encoding = "32FC1"
             out.step = out.width * 4
@@ -243,6 +251,8 @@ class RealSenseRelay(Node):
             cloud = PointCloud2()
             cloud.header = header
             cloud.header.frame_id = self._frame
+            if self._restamp:
+                cloud.header.stamp = self.get_clock().now().to_msg()
             cloud.height, cloud.width = 1, int(pts.shape[0])
             cloud.fields = [PointField(name=n, offset=4 * i, datatype=PointField.FLOAT32, count=1) for i, n in enumerate("xyz")]
             cloud.is_bigendian = False
