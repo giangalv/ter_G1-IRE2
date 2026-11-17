@@ -9,7 +9,7 @@
     and a five-stage safety pipeline (action_executor_node), aggregate risk estimation
     (risk_estimator_node) and the Inspire hand bridge, RH56E2 Modbus TCP or RH56DFQ serial (inspire_hand_bridge_node).
   </description>
-  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <maintainer email="gianluca.galvagni99@gmail.com">Gianluca Galvagni</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

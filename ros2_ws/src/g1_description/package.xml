@@ -8,7 +8,7 @@
     with the Inspire RH56 hands. The model files are not stored in this repository:
     run fetch_assets.sh before building.
   </description>
-  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <maintainer email="gianluca.galvagni99@gmail.com">Gianluca Galvagni</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

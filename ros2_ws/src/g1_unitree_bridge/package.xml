@@ -8,7 +8,7 @@
     /lf/lowstate) to the workspace topics: /g1/joint_states (BODY-41 order) and /g1/imu/data.
     It never publishes anything towards the robot.
   </description>
-  <maintainer email="v.belcamino@fusionailabs.it">Valerio Belcamino</maintainer>
+  <maintainer email="gianluca.galvagni99@gmail.com">Gianluca Galvagni</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>

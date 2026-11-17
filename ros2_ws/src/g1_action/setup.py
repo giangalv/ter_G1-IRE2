@@ -14,8 +14,8 @@ setup(
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="Valerio Belcamino",
-    maintainer_email="v.belcamino@fusionailabs.it",
+    maintainer="Gianluca Galvagni",
+    maintainer_email="gianluca.galvagni99@gmail.com",
     description=(
         "Safety-critical realtime execution package for the G1 U6 hybrid VLA system: "
         "action chunk execution, risk estimation and Inspire hand bridging."
