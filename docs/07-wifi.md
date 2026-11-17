@@ -239,6 +239,16 @@ cloud 2.6 Hz, **ping to the AP 11.8 ms average, max 153, 0 % loss**, `/lf/lowsta
 against up to 1.4 s with the full cloud), 0 messages dropped by RViz. The depth image that crosses the link is the PNG (46 kB, 5 Hz);
 the 2.3 MB/s of the depth *cloud* is built on the laptop.
 
+**Walking over the Wi-Fi with that load (2026-11-17 15:04-15:09, robot on the support stand, user at the keyboard with the remote in
+hand, RViz `walk` profile with the slim LiDAR + depth cloud):** state keys `p` 15:04:28, `l` 15:07:05, `g` 15:07:14 (FSM 501), then
+`w` ~1.8 s and `s` ~3 s at 0.2 m/s (18 + 30 requests, 5 zero-velocity stops). User: real steps both ways, the model moved in RViz, the
+LiDAR stayed fluid, the depth cloud was present and moving. Link during the 30 s of walking: 12 `lowstate` gaps > 0.12 s, longest 0.27 s,
+0 above 0.3 s; 3 of 56 velocity requests answered slowly (52, 100, 150 ms), none lost; ping to the AP 11 ms average; 0 RViz drops. The
+ladder had two gaps (0.34 s at 15:06:32, 0.65 s at 15:07:11, near the entry to 501). Not measured: depth-cloud rate and leg motion
+during the walk. After the walk (15:09:17-15:09:26) ten seconds of small gaps (<= 0.33 s) and a ~30 s stall of the filter on the Jetson
+(1.2 clouds/s, ~800 ms per publish, then back to 10/s) with no cause found (Jetson load 2.6, memory free); the D435i supervisor
+restarted the camera driver at 21:58, 22:02 and 22:06 Jetson time.
+
 Same day, on the Jetson (`/var/log/kern.log`, readable by `unitree`, use `grep -a`): the two palm cameras (`1-2.2.1`, `1-2.2.2`,
 behind the 10-port hub on bus 1, the Wi-Fi radio `rtl8852bu` is on port 4 of the same Realtek hub) disconnect and re-enumerate
 in turns, 4-5 times a minute for long stretches (6-9 per 10 min all afternoon of 2026-11-13, a disconnect every 13 s on this boot at
