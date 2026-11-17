@@ -210,6 +210,43 @@ has not been overridden").
 (12-17 before). `full`: the RealSense was dead for that phase (colour and depth 0 messages; see 06, its supervisor restarted
 it at 21:25 Jetson time), LiDAR 9.9 Hz, tactile 2.9 / 2.7 Hz, 10 errors.
 
+### LiDAR over the Wi-Fi: filter it on the Jetson first (2026-11-17, `tools/lidar_slim.sh`)
+
+The robot's cloud (`/utlidar/cloud_livox_mid360`) is 20 048 points x 22 byte = 441 kB at 10 Hz = **4.4 MB/s** (35 Mbit/s). On
+2026-11-17 the Wi-Fi did not carry it together with the depth cloud: ping to the AP 356-397 ms average (max 635), 5-7 % loss,
+`/lf/lowstate` gaps up to 1.4 s, LiDAR 2.5-3 Hz. The channel was worth 5.2-8.5 MB/s that day (60 MB over ssh, twice; signal
+-51 dBm, 130 Mbit/s negotiated, Jetson CPU idle), and on 2026-11-13 the same profile had fitted (ping 5 ms): the link is marginal and
+varies. So the cloud is cut *before* it crosses the Wi-Fi:
+
+    G1_PW=<Jetson password> tools/lidar_slim.sh start [--stride 2 ...]     # also: stop | status | log
+    G1_LIDAR_TOPIC=/g1/lidar/slim G1_WALK=true G1_WIFI_PROFILE=walk ... bash src/g1_viz/scripts/viz_real.sh wifi
+
+`tools/lidar_slim_node.py` runs on the Jetson as the normal user (Foxy + `~/cyclonedds_ws`, its own Cyclone config
+`~/g1_lidar_slim/cyclonedds.xml` pinned to 192.168.123.164: the stock `~/cyclonedds_ws/cyclonedds.xml` names `eth0`, the robot LAN is
+`eth1` on this Jetson). It reads the robot's cloud over the robot LAN and publishes `/g1/lidar/slim`, same fields and frame, without
+(1) the **empty points**: x = y = z = exactly 0, **38 %** of every cloud (7 718 of 19 872 in one cloud, none NaN, none with a tiny
+range; spread over the whole array, runs up to 195 in a row, 28-65 % per tenth; they keep a `time`, a `ring` and sometimes an `intensity`
+up to 34, so they are scan slots with a placeholder position; whether the Livox found no return or Unitree's driver rejected the point
+is NOT known), and (2) the robot's own head and
+shoulders: returns closer than 0.6 m at 40-100 deg to either side of the sensor (sensor frame, 0 = ahead). Measured in 6
+clouds: that second part is only **329 points (1.6 %)**, so it saves almost nothing in bytes; the empty points are the saving. Result:
+**12 000 points, 265 kB per cloud, 2.6 MB/s = 60 %**, 3-10 ms of Jetson CPU per cloud, nothing persists (the process dies with the
+boot, the files are in `~/g1_lidar_slim`). `--stride N` keeps every N-th remaining point (N = 2: 1.3 MB/s) if the link is
+worse; `--head-range/--head-az-min/--head-az-max/--min-range` change the cut.
+
+Measured over the Wi-Fi with the `walk` profile (LiDAR slim + depth cloud, robot in zero torque, 5 min): LiDAR 10.1 Hz, depth
+cloud 2.6 Hz, **ping to the AP 11.8 ms average, max 153, 0 % loss**, `/lf/lowstate` gaps at most 0.51 s (one >= 0.5 s in 5 min,
+against up to 1.4 s with the full cloud), 0 messages dropped by RViz. The depth image that crosses the link is the PNG (46 kB, 5 Hz);
+the 2.3 MB/s of the depth *cloud* is built on the laptop.
+
+Same day, on the Jetson (`/var/log/kern.log`, readable by `unitree`, use `grep -a`): the two palm cameras (`1-2.2.1`, `1-2.2.2`,
+behind the 10-port hub on bus 1, the Wi-Fi radio `rtl8852bu` is on port 4 of the same Realtek hub) disconnect and re-enumerate
+in turns, 4-5 times a minute for long stretches (6-9 per 10 min all afternoon of 2026-11-13, a disconnect every 13 s on this boot at
+21:53), also when nobody uses them. They are NOT the cause of the 2026-11-13 `lowstate` gaps (16:56 and 16:59 laptop time): the rate
+was the same 4-5 per minute from 16:46 on while the gaps came only at those two minutes, and the link is fine during a storm now.
+The only laptop-side trace in those minutes is one `CTRL-EVENT-BEACON-LOSS` on the *dongle* (lab Wi-Fi) at 16:55:48; the Jetson's
+`RTW` log has nothing after 23:25 that day.
+
 ### Two Wi-Fi cards in the laptop (2026-11-06): the lab keeps its internet
 
 With a USB dongle plugged in, the lab Wi-Fi profile moves to the dongle (`nmcli connection modify <lab> connection.interface-name
